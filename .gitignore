@@ -1,0 +1,9 @@
+# Built and derived from the player's own disc; never committed.
+out/
+build/
+profiles/*/generated/
+profiles/*/overlays/
+profiles/*/game/
+game/
+*.iso
+*.cso
