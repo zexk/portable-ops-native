@@ -17,6 +17,9 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+# Left to the interpreter: KCEJ_FS's recompiled code hangs the boot (not yet
+# understood); it is I/O-bound, so interpreting it costs little.
+SKIP = {'KCEJ_FS'}
 NAME = re.compile(r'^mod([0-9A-F]{8})_(.+)_([0-9A-F]{16})$')
 
 
@@ -37,6 +40,8 @@ def main():
         if not match:
             continue
         base, name, digest = int(match.group(1), 16), match.group(2), int(match.group(3), 16)
+        if name in SKIP:
+            continue
         data = dump.read_bytes()
         assert fnv1a64(data) == digest, '%s: hash does not match its name' % dump.name
         prefix = re.sub(r'\W', '_', dump.stem)
