@@ -1,9 +1,10 @@
-# Built and derived from the player's own disc; never committed.
-out/
 build/
-profiles/*/generated/
-profiles/*/overlays/
-profiles/*/game/
+# Built and derived from the player's own disc; never committed.
+*.cso
 game/
 *.iso
-*.cso
+out/
+profiles/*/game/
+profiles/*/generated/
+profiles/*/overlays/
+# Recompiled module corpora: generated from the player's dumps.
