@@ -17,9 +17,8 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-# Left to the interpreter: KCEJ_FS's recompiled code hangs the boot (not yet
-# understood); it is I/O-bound, so interpreting it costs little.
-SKIP = {'KCEJ_FS'}
+# Modules left to the interpreter.
+SKIP = set()
 NAME = re.compile(r'^mod([0-9A-F]{8})_(.+)_([0-9A-F]{16})$')
 
 
