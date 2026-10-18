@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "profile.hpp"
+#include "stage_sweep.hpp"
 #include "umd_key_table.hpp"
 
 #include "psprecomp/elf32.hpp"
@@ -15,6 +16,12 @@ namespace {
 constexpr SaveFolder kSaveFolders[] = {
     {"ULUS10202", "Game data", true},
 };
+
+// The engine's stage loader (create, step) and the game's sceKernelDelayThreadCB import
+// stub (the engine always loads at 0x08804000).
+constexpr mgs::StageLoader kStageLoader{0x08804000u + 0x39A20u, 0x08804000u + 0x396E4u, 0x08804000u + 0x1D69ECu};
+
+void register_hle(HleRegistrar &hle) { mgs::register_stage_sweep(hle, kStageLoader); }
 
 } // namespace
 
@@ -51,6 +58,8 @@ const GameProfile &game() {
         .save_folders = kSaveFolders,
 
         .adhoc_product_code = "ULUS10202",
+
+        .register_extra_hle = &register_hle,
 
         // North American console: English, cross confirms.
         .system_language = 1u,
