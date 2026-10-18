@@ -1,3 +1,4 @@
 [submodule "portablekit"]
 	path = portablekit
-	url = https://github.com/TeamGDB/PortableKit
+	url = https://github.com/zexk/PortableKit
+	branch = mgs
