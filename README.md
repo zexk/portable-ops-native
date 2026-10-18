@@ -40,7 +40,8 @@ cmake -S . -B out/po && cmake --build out/po
 
 A module is identified by its code as it is in memory when it first runs after
 the game has patched it, so every stage you have reached runs natively next
-time.
+time. Import stubs inside a module's code (`KCEJ_FS` has three) are dumped
+beside it as a `.stubs` file and kept out of its compiled code.
 
 ## Testing without a window
 
@@ -58,5 +59,3 @@ from a system-layer one.
   unless skipped: the scene asks for a sound bank part
   (`oss_bgm_bgm01_01_03.sep`) that is not on the disc, apparently because its
   music and voice sequences never start.
-- `KCEJ_FS` is recompiled only up to the import stubs inside its code; the
-  rest is interpreted.

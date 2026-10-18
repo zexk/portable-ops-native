@@ -5,7 +5,8 @@ usage: scripts/add-modules.py po|pop DUMP_DIR
 
 A run with <prefix>_DUMP_MODULES=DUMP_DIR writes the code of every module it
 loads, as it is in memory at its first run (the game patches stage code after
-loading it), to DUMP_DIR/mod<BASE>_<NAME>_<HASH>.bin. Each dump not yet in
+loading it), to DUMP_DIR/mod<BASE>_<NAME>_<HASH>.bin, with the import stubs
+inside its code, if any, in a .stubs file beside it. Each dump not yet in
 profiles/<edition>/overlays/ is wrapped in an ELF, recompiled at its base with
 psp_recomp, and given the meta.txt (size = code_size = the dump's size, hash =
 its FNV-1a) the build turns into a library the host installs when that code
@@ -49,7 +50,15 @@ def main():
             continue
         target.mkdir(parents=True, exist_ok=True)
         elf = target / 'module.elf'
-        subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)], check=True)
+        # Import stubs inside the code (<id>.stubs, offsets START-END a line)
+        # stay out of the corpus: calls to them must reach the HLE.
+        stubs = dump.with_suffix('.stubs')
+        exclude = []
+        if stubs.exists():
+            for line in stubs.read_text().split():
+                start, end = (int(text, 16) for text in line.split('-'))
+                exclude += ['--exclude', '0x%X-0x%X' % (start, end)]
+        subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)] + exclude, check=True)
         subprocess.run([str(recomp), str(elf), '--auto', str(target), '0x%08X' % base, '--prefix', prefix],
                        check=True, stdout=subprocess.DEVNULL)
         elf.unlink()
