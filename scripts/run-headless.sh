@@ -16,5 +16,5 @@ rm -rf "$shots"; mkdir -p "$shots"
 env VK_ICD_FILENAMES="$mesa/share/vulkan/icd.d/lvp_icd.x86_64.json" \
     "${prefix}_SCREENSHOT_DIR=$shots" "${prefix}_NO_AUDIO=1" "$@" \
   nix shell nixpkgs#xvfb-run --command \
-  timeout "$seconds" xvfb-run -a -s '-screen 0 1280x720x24' \
-  nix develop --command "./out/$edition/bin/$program" 2>&1 | tee "out/$edition-run.log" | grep -E 'Runtime stopped|\[module\]|hle-stub' || true
+  xvfb-run -a -s '-screen 0 1280x720x24' \
+  nix develop --command timeout -k 5 "$seconds" "./out/$edition/bin/$program" 2>&1 | tee "out/$edition-run.log" | grep -E 'Runtime stopped|\[module\]|hle-stub' || true
