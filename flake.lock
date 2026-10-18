@@ -1,0 +1,130 @@
+{
+  "nodes": {
+    "ghidra-allegrex": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787669517,
+        "narHash": "sha256-Q8YT4KjYEBdSkyHwoEyxKzJXkOedYUeeOmQyl97iDV8=",
+        "owner": "kotcrab",
+        "repo": "ghidra-allegrex",
+        "rev": "8d5ca58e609ad7e732d550036126b6b0f99bd663",
+        "type": "github"
+      },
+      "original": {
+        "owner": "kotcrab",
+        "repo": "ghidra-allegrex",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792094642,
+        "narHash": "sha256-zp8ToDMnqZcu4o4IH9pdwXFXGp7yLm/M0dEnNWnyd7I=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "fe13242281a67641c0102cdb1087f0ebe586c7df",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1791456040,
+        "narHash": "sha256-H83yz/do+hjOO0uujHyH8RgtIQP2v7Mw+cLwcZK/xKc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "poplusplus": {
+      "inputs": {
+        "ghidra-allegrex": "ghidra-allegrex",
+        "nixpkgs": "nixpkgs_2",
+        "prxtool": "prxtool",
+        "psp-ghidra-scripts": "psp-ghidra-scripts",
+        "pspdecrypt": "pspdecrypt"
+      },
+      "locked": {
+        "dirtyRev": "49fe8a1de17b601da9476633e8fab325487996b0-dirty",
+        "dirtyShortRev": "49fe8a1-dirty",
+        "lastModified": 1792267318,
+        "narHash": "sha256-bHR3368bBeCxVAIWjCOE4/LIA2Q3qmD+tWAbR4KpcGw=",
+        "type": "git",
+        "url": "file:///path/to/local-checkout"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///path/to/local-checkout"
+      }
+    },
+    "prxtool": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1402167048,
+        "narHash": "sha256-VtAPkp/wyH+22Ra4xi2ji1pMQZS4kv3TXdSx8Lsy8sI=",
+        "owner": "pspdev",
+        "repo": "prxtool",
+        "rev": "08849d87fa8692f2ba29238ec1710f2706e3e021",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pspdev",
+        "repo": "prxtool",
+        "type": "github"
+      }
+    },
+    "psp-ghidra-scripts": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1764093487,
+        "narHash": "sha256-RSe+sJCcaiUwK5GW/T9qwRp9BhIuucOokDFW+z7HIps=",
+        "owner": "pspdev",
+        "repo": "psp-ghidra-scripts",
+        "rev": "76bbf68b76504df5ba8dfd59042332343b1daa7d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pspdev",
+        "repo": "psp-ghidra-scripts",
+        "type": "github"
+      }
+    },
+    "pspdecrypt": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1717775032,
+        "narHash": "sha256-OvX1jsOCB9AG9QienbtN7S4YxYEQISHggo49l+ZVbXM=",
+        "owner": "John-K",
+        "repo": "pspdecrypt",
+        "rev": "c156627db7634d395c380c0a9589130f603307fc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "John-K",
+        "repo": "pspdecrypt",
+        "rev": "c156627db7634d395c380c0a9589130f603307fc",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "poplusplus": "poplusplus"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
