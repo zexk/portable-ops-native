@@ -40,7 +40,9 @@ cmake -S . -B out/po && cmake --build out/po
 
 A module is identified by its code as it is in memory when it first runs after
 the game has patched it, so every stage you have reached runs natively next
-time. Import stubs inside a module's code (`KCEJ_FS` has three) are dumped
+time. Copies of one stage differ in a few units only, so `add-modules.py`
+moves each unit to `profiles/<edition>/units/`, named by its code, and the
+build compiles it once for all the copies that share it. Import stubs inside a module's code (`KCEJ_FS` has three) are dumped
 beside it as a `.stubs` file and kept out of its compiled code.
 
 ## Testing without a window

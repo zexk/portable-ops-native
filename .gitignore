@@ -7,4 +7,5 @@ out/
 profiles/*/game/
 profiles/*/generated/
 profiles/*/overlays/
+profiles/*/units/
 # Recompiled module corpora: generated from the player's dumps.
