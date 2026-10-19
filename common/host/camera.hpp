@@ -22,6 +22,9 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <span>
 #include <numbers>
 
 namespace mgs {
@@ -87,10 +90,48 @@ inline void camera_frame(psprecomp::Runtime &) { portablekit::camera::discard();
 inline bool camera_driving() { return camera_state.player_input != nullptr; }
 
 inline void install_camera(psprecomp::Runtime &runtime, CameraAddresses addresses) {
+    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(addresses.player_input);
+    if (original == nullptr || original == &player_input) return;
     camera_state.addresses = addresses;
-    camera_state.player_input = runtime.registered_function(addresses.player_input);
-    if (camera_state.player_input != nullptr)
-        runtime.register_function(addresses.player_input, &player_input, "mgs_player_input");
+    camera_state.player_input = original;
+    runtime.register_function(addresses.player_input, &player_input, "mgs_player_input");
+    std::cout << "[camera-stick] second stick feeds the camera stick from 0x" << std::hex << addresses.player_input
+              << std::dec << std::endl;
+}
+
+// An instruction with what relocation or a different data layout changes
+// (jump targets, address halves and offsets) taken out.
+[[nodiscard]] constexpr std::uint32_t code_shape(std::uint32_t word) {
+    switch (word >> 26u) {
+    case 0x02: case 0x03: return word & 0xfc000000u;
+    case 0x08: case 0x09: case 0x0d: case 0x0f: case 0x20: case 0x21: case 0x23: case 0x24: case 0x25:
+    case 0x28: case 0x29: case 0x2b: case 0x31: case 0x32: case 0x36: case 0x39: case 0x3a: case 0x3e:
+        return word & 0xffff0000u;
+    default: return word;
+    }
+}
+
+// PO+ keeps the player's code in each stage module, at a different place in
+// each: the input step is found by the shape of its first instructions, and
+// only where exactly one place has it.
+inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
+                                     std::span<const std::uint8_t> code, std::span<const std::uint32_t> shape,
+                                     std::uint32_t action_flags, std::uint32_t pad) {
+    const auto word = [&](std::size_t at) {
+        std::uint32_t value = 0u;
+        std::memcpy(&value, code.data() + at, sizeof(value));
+        return code_shape(value);
+    };
+    std::size_t found = code.size();
+    for (std::size_t at = 0; at + 4u * shape.size() <= code.size(); at += 4u) {
+        std::size_t k = 0;
+        while (k < shape.size() && word(at + 4u * k) == shape[k]) ++k;
+        if (k < shape.size()) continue;
+        if (found != code.size()) return;  // more than one: not this
+        found = at;
+    }
+    if (found == code.size()) return;
+    install_camera(runtime, {base + static_cast<std::uint32_t>(found), action_flags, pad});
 }
 
 inline constexpr portablekit::CameraDriver kCameraDriver{

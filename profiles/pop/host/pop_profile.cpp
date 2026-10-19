@@ -4,6 +4,7 @@
 // PSP_GAME/PARAM.SFO, the hashes from the files, the tag from offset 0xD0 of
 // EBOOT.BIN, the image size from the ELF's program headers.
 
+#include "camera.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "stage_sweep.hpp"
@@ -27,6 +28,20 @@ void register_hle(HleRegistrar &hle) { mgs::register_stage_sweep(hle, kStageLoad
 // The engine's routine appending a 32-bit value to a network message, and the
 // return address of the lobby join request's call to it (savempo.hpp).
 constexpr mgs::SaveMpoMark kSaveMpoMark{0x08804000u + 0x142598u, 0x08804000u + 0x137554u};
+
+// The player's input step lives in each stage module: the shape of its first
+// twelve instructions, then the actors' action bitsets and the engine's pad
+// state in the executable.
+constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060000u, 0x24070000u,
+                                               0xafb10000u, 0x00a08821u, 0x24050000u, 0xafb00000u,
+                                               0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
+constexpr std::uint32_t kActionFlags = 0x08804000u + 0x294D5Cu;
+constexpr std::uint32_t kPad = 0x08804000u + 0x1E1C60u;
+
+void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
+                       std::span<const std::uint8_t> code) {
+    if (name == "mgp_stage") mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kActionFlags, kPad);
+}
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_savempo_mark(runtime, kSaveMpoMark);
@@ -72,6 +87,8 @@ const GameProfile &game() {
 
         .register_extra_hle = &register_hle,
         .patch_loaded_image = &patch_image,
+        .module_code_ready = &module_code_ready,
+        .camera = &mgs::kCameraDriver,
 
         // North American console: English, cross confirms.
         .system_language = 1u,
