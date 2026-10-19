@@ -49,9 +49,38 @@ inline CameraState camera_state;
     return (memory.load32(word) >> (flag & 31u) & 1u) != 0u;
 }
 
+// The camera's own reading of a stick byte: nothing within 0x40 of centre, then
+// twice the rest, up to 126.
+[[nodiscard]] inline float camera_input(float byte) { return std::copysign(std::max(std::fabs(byte) - 64.0f, 0.0f) * 2.0f, byte); }
+
+// A stick byte the camera reads as `input`, for adding to what a stick asked.
+[[nodiscard]] inline float camera_byte(float input) {
+    input = std::clamp(input, -126.0f, 126.0f);
+    return input == 0.0f ? 0.0f : std::copysign(64.0f + std::fabs(input) / 2.0f, input);
+}
+
+// The third-person orbit keeps 0.625 of its turn each frame and adds
+// input / 128 * 341.33 (0x10dd08 in PO), so a held input turns it by about
+// 7.1 units (of 65536 a turn) a frame. Mouse and touch motion becomes the
+// input that would turn the camera as far in a frame; their vertical motion
+// is scaled alike and moves the camera as the stick's up and down does.
+constexpr float kUnitsPerInput = 341.3333f / 128.0f / (1.0f - 0.625f);
+constexpr float kInputPerDegree = 65536.0f / 360.0f / kUnitsPerInput;
+
 inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t player) {
-    const portablekit::camera::Rate stick = portablekit::camera::rate(portablekit::camera::Source::Stick);
-    if (stick.yaw == 0.0f && stick.pitch == 0.0f) return;
+    using portablekit::camera::Source;
+    const portablekit::camera::Rate stick = portablekit::camera::rate(Source::Stick);
+    const portablekit::camera::Turn mouse = portablekit::camera::take(Source::Mouse);
+    const portablekit::camera::Turn touch = portablekit::camera::take(Source::Touch);
+    // What the camera could not take last frame (it turns at most 126 a frame)
+    // comes first, so a quick swipe turns it as far, only over more frames.
+    static float carried_yaw = 0.0f;
+    static float carried_pitch = 0.0f;
+    const float motion_yaw = carried_yaw + (mouse.yaw_degrees + touch.yaw_degrees) * kInputPerDegree;
+    const float motion_pitch = carried_pitch + (mouse.pitch_degrees + touch.pitch_degrees) * kInputPerDegree;
+    carried_yaw = 0.0f;
+    carried_pitch = 0.0f;
+    if (stick.yaw == 0.0f && stick.pitch == 0.0f && motion_yaw == 0.0f && motion_pitch == 0.0f) return;
     const std::uint32_t pad = camera_state.addresses.pad;
     // Where the game clears the camera stick, it stays clear.
     if (action(memory, player, 0x13bu) || action(memory, player, 0x79u)) return;
@@ -61,6 +90,17 @@ inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t play
     // length over 127 at most 1, and a strength of 255 times that, nothing below 0x30.
     float x = std::max(std::round(stick.yaw * 127.0f), -127.0f);
     float y = std::max(std::round(stick.pitch * 127.0f), -127.0f);
+    const auto add_motion = [](float &byte, float motion, float &carried) {
+        if (motion == 0.0f) return;
+        const float wanted = camera_input(byte) + motion;
+        const float taken = std::clamp(wanted, -126.0f, 126.0f);
+        // At most two frames' worth waits, so a spin faster than the camera
+        // turns stops with the mouse instead of running on.
+        carried = std::clamp(wanted - taken, -252.0f, 252.0f);
+        byte = std::round(camera_byte(taken));
+    };
+    add_motion(x, motion_yaw, carried_yaw);
+    add_motion(y, motion_pitch, carried_pitch);
     float length = std::hypot(x, y) / 127.0f;
     if (length > 1.0f) {
         x /= length;
