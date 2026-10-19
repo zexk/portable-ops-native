@@ -23,9 +23,8 @@ constexpr SaveFolder kSaveFolders[] = {
 // stub (the engine always loads at 0x08804000).
 constexpr mgs::StageLoader kStageLoader{0x08804000u + 0x39A20u, 0x08804000u + 0x396E4u, 0x08804000u + 0x1D69ECu};
 
-// Camera slot 0, the third-person camera mode's id and the camera system's
-// per-frame update.
-constexpr mgs::CameraAddresses kCamera{0x08804000u + 0x2042D0u, 0x005FF7BBu, 0x08804000u + 0xF088u};
+// The player's input step, the actors' action bitsets and the engine's pad state.
+constexpr mgs::CameraAddresses kCamera{0x08804000u + 0xB12F8u, 0x08804000u + 0x2F70BCu, 0x08804000u + 0x2753D8u};
 
 void register_hle(HleRegistrar &hle) {
     mgs::register_stage_sweep(hle, kStageLoader);
