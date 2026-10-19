@@ -55,7 +55,9 @@ from a system-layer one.
 
 ## Known issues
 
-- Portable Ops story comic cut-scenes are silent and stop at a fixed frame
-  unless skipped: the scene asks for a sound bank part
-  (`oss_bgm_bgm01_01_03.sep`) that is not on the disc, apparently because its
-  music and voice sequences never start.
+- Portable Ops story comic pages are silent and stop at a fixed frame unless
+  skipped (the comic's opening movie has its sound). After loading a page's
+  sound banks, KCEJ_FS gets no handle for the next music part (the comic
+  names `oss_bgm_bgm01_01_03.sep`, which is not on the disc) and retries an
+  asynchronous read on handle -1 once a second, forever. PPSSPP reads the
+  same banks and plays on, so its lookup must succeed where ours fails.
