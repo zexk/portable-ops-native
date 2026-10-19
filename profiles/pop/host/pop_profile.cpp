@@ -37,10 +37,11 @@ constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060
                                                0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
 constexpr std::uint32_t kActionFlags = 0x08804000u + 0x294D5Cu;
 constexpr std::uint32_t kPad = 0x08804000u + 0x1E1C60u;
+constexpr std::uint32_t kGlobals = 0x08804000u + 0x1731F0u;
 
 void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                        std::span<const std::uint8_t> code) {
-    if (name == "mgp_stage") mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kActionFlags, kPad);
+    if (name == "mgp_stage") mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kActionFlags, kPad, kGlobals);
 }
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {

@@ -15,6 +15,7 @@
 
 #include "camera/camera_input.hpp"
 #include "profile.hpp"
+#include "settings/settings.hpp"
 
 #include "psprecomp/runtime.hpp"
 
@@ -33,6 +34,7 @@ struct CameraAddresses {
     std::uint32_t player_input;  // the player's input step, called with the player in a0
     std::uint32_t action_flags;  // per-actor action bitsets, 0x1c words each
     std::uint32_t pad;           // the engine's pad state: +0x26 movement yaw
+    std::uint32_t globals;       // where the engine keeps the pointer to its control settings
 };
 
 struct CameraState {
@@ -47,11 +49,7 @@ inline CameraState camera_state;
     return (memory.load32(word) >> (flag & 31u) & 1u) != 0u;
 }
 
-inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
-    auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
-    const std::uint32_t player = ctx.gpr[4];
-    camera_state.player_input(rt, ctx);
-
+inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t player) {
     const portablekit::camera::Rate stick = portablekit::camera::rate(portablekit::camera::Source::Stick);
     if (stick.yaw == 0.0f && stick.pitch == 0.0f) return;
     const std::uint32_t pad = camera_state.addresses.pad;
@@ -85,6 +83,49 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
 
 // The stick is read where the game reads its own; motion sources (mouse,
 // touch) have nowhere to go yet and are dropped rather than left to build up.
+// Whether first person reads the two sticks the other way round, as the
+// game's choosers (look: 0xb20f4, move: 0xb1cec in PO) decide it.
+[[nodiscard]] inline bool first_person_swapped(psprecomp::GuestMemory &memory, std::uint32_t player) {
+    const auto flag = [&](std::uint32_t f) { return action(memory, player, f); };
+    if (flag(0x148u)) return false;
+    if (flag(0x16u)) return true;
+    if (!flag(0xbau) && !flag(7u)) return false;
+    const std::uint32_t globals = memory.load32(camera_state.addresses.globals);
+    if ((memory.load32(globals + 4u) & 0x80000u) != 0u) return false;
+    return (memory.load32(player + 0x724u) & memory.load32(globals + 0x6cu)) != 0u || !flag(0x4fu);
+}
+
+// The movement stick (+0x730..) and the camera stick (+0x73c..) trade places:
+// x and y, strength, world angle and length.
+inline void swap_sticks(psprecomp::GuestMemory &memory, std::uint32_t player) {
+    const auto swap8 = [&](std::uint32_t a, std::uint32_t b) {
+        const std::uint8_t t = memory.load8(player + a);
+        memory.store8(player + a, memory.load8(player + b));
+        memory.store8(player + b, t);
+    };
+    const auto swap16 = [&](std::uint32_t a, std::uint32_t b) {
+        const std::uint16_t t = memory.load16(player + a);
+        memory.store16(player + a, memory.load16(player + b));
+        memory.store16(player + b, t);
+    };
+    const std::uint32_t length = memory.load32(player + 0x738u);
+    swap8(0x732u, 0x73eu);
+    swap8(0x733u, 0x73fu);
+    swap16(0x730u, 0x73cu);
+    swap16(0x734u, 0x740u);
+    memory.store32(player + 0x738u, memory.load32(player + 0x744u));
+    memory.store32(player + 0x744u, length);
+}
+
+inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
+    auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
+    const std::uint32_t player = ctx.gpr[4];
+    camera_state.player_input(rt, ctx);
+    const portablekit::settings::Settings &settings = portablekit::settings::current();
+    if (settings.analog_camera) feed_camera_stick(memory, player);
+    if (settings.swap_sticks_first_person && first_person_swapped(memory, player)) swap_sticks(memory, player);
+}
+
 inline void camera_frame(psprecomp::Runtime &) { portablekit::camera::discard(); }
 
 inline bool camera_driving() { return camera_state.player_input != nullptr; }
@@ -116,7 +157,7 @@ inline void install_camera(psprecomp::Runtime &runtime, CameraAddresses addresse
 // only where exactly one place has it.
 inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
                                      std::span<const std::uint8_t> code, std::span<const std::uint32_t> shape,
-                                     std::uint32_t action_flags, std::uint32_t pad) {
+                                     std::uint32_t action_flags, std::uint32_t pad, std::uint32_t globals) {
     const auto word = [&](std::size_t at) {
         std::uint32_t value = 0u;
         std::memcpy(&value, code.data() + at, sizeof(value));
@@ -131,12 +172,13 @@ inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t 
         found = at;
     }
     if (found == code.size()) return;
-    install_camera(runtime, {base + static_cast<std::uint32_t>(found), action_flags, pad});
+    install_camera(runtime, {base + static_cast<std::uint32_t>(found), action_flags, pad, globals});
 }
 
 inline constexpr portablekit::CameraDriver kCameraDriver{
     .frame = &camera_frame,
     .driving = &camera_driving,
+    .swaps_first_person = true,
 };
 
 } // namespace mgs
