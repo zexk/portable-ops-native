@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "camera.hpp"
+#include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "stage_sweep.hpp"
@@ -90,6 +91,7 @@ const GameProfile &game() {
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
         .camera = &mgs::kCameraDriver,
+        .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         // North American console: English, cross confirms.
         .system_language = 1u,
