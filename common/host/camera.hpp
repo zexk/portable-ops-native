@@ -67,6 +67,19 @@ inline CameraState camera_state;
 constexpr float kUnitsPerInput = 341.3333f / 128.0f / (1.0f - 0.625f);
 constexpr float kInputPerDegree = 65536.0f / 360.0f / kUnitsPerInput;
 
+// Sets an action flag as the game does (0xcb58c in PO): in the shared bitset
+// and in the actor's own copy at +0xb84 (the actor table sits 0x5c before it).
+inline void set_action(psprecomp::GuestMemory &memory, std::uint32_t player, std::uint32_t flag) {
+    const std::uint32_t index = memory.load32(memory.load32(player + 0x4cu) + 0x28u);
+    const std::uint32_t bit = 1u << (flag & 31u);
+    const std::uint32_t word = camera_state.addresses.action_flags + 4u * (index * 0x1cu + (flag >> 5u));
+    memory.store32(word, memory.load32(word) | bit);
+    const std::uint32_t actor = memory.load32(camera_state.addresses.action_flags - 0x5cu + 4u * index);
+    if (actor == 0u) return;
+    const std::uint32_t own = actor + 0xb84u + 4u * (flag >> 5u);
+    memory.store32(own, memory.load32(own) | bit);
+}
+
 inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t player) {
     using portablekit::camera::Source;
     const portablekit::camera::Rate stick = portablekit::camera::rate(Source::Stick);
@@ -119,6 +132,11 @@ inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t play
     }
     memory.store32(player + 0x744u, std::bit_cast<std::uint32_t>(length));
     memory.store16(player + 0x73cu, static_cast<std::uint16_t>(strength));
+    // What the input step does last with the camera stick it filled: mark it
+    // held, and while it turns sideways have the movement's reference follow
+    // the camera, so Snake walks where the turned camera looks.
+    if (x != 0.0f || y != 0.0f) memory.store32(player + 0x44u, memory.load32(player + 0x44u) | 0x40u);
+    if (static_cast<std::int8_t>(x) != 0) set_action(memory, player, 0xd7u);
 }
 
 // The stick is read where the game reads its own; motion sources (mouse,
