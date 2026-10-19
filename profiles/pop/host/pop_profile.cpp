@@ -4,6 +4,7 @@
 // PSP_GAME/PARAM.SFO, the hashes from the files, the tag from offset 0xD0 of
 // EBOOT.BIN, the image size from the ELF's program headers.
 
+#include "camera.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "stage_sweep.hpp"
@@ -28,8 +29,13 @@ void register_hle(HleRegistrar &hle) { mgs::register_stage_sweep(hle, kStageLoad
 // return address of the lobby join request's call to it (savempo.hpp).
 constexpr mgs::SaveMpoMark kSaveMpoMark{0x08804000u + 0x142598u, 0x08804000u + 0x137554u};
 
+// Camera slot 0, the third-person camera mode's id and the camera system's
+// per-frame update: the same engine code as PO's, found by matching it.
+constexpr mgs::CameraAddresses kCamera{0x08804000u + 0x18DD30u, 0x005FF7BBu, 0x08804000u + 0x10940u};
+
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_savempo_mark(runtime, kSaveMpoMark);
+    mgs::install_camera(runtime, kCamera);
 }
 
 } // namespace
@@ -72,6 +78,7 @@ const GameProfile &game() {
 
         .register_extra_hle = &register_hle,
         .patch_loaded_image = &patch_image,
+        .camera = &mgs::kCameraDriver,
 
         // North American console: English, cross confirms.
         .system_language = 1u,
