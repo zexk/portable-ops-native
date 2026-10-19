@@ -24,6 +24,14 @@ constexpr mgs::StageLoader kStageLoader{0x08804000u + 0x41498u, 0x08804000u + 0x
 
 void register_hle(HleRegistrar &hle) { mgs::register_stage_sweep(hle, kStageLoader); }
 
+// The engine's routine appending a 32-bit value to a network message, and the
+// return address of the lobby join request's call to it (savempo.hpp).
+constexpr mgs::SaveMpoMark kSaveMpoMark{0x08804000u + 0x142598u, 0x08804000u + 0x137554u};
+
+void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
+    mgs::install_savempo_mark(runtime, kSaveMpoMark);
+}
+
 } // namespace
 
 const GameProfile &game() {
@@ -63,6 +71,7 @@ const GameProfile &game() {
         .infrastructure_url = &mgs::savempo_url,
 
         .register_extra_hle = &register_hle,
+        .patch_loaded_image = &patch_image,
 
         // North American console: English, cross confirms.
         .system_language = 1u,
