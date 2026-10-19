@@ -52,12 +52,3 @@ Useful variables (prefix `MGSPO_` or `MGSPOP_`): `TRACE_IO`, `TRACE_MODULES`,
 `TRACE_AUDIO`, `TRACE_MPEG`, `DUMP_MODULES`, `INPUT_SCRIPT`.
 `PSPRECOMP_NO_AOT=1` runs everything interpreted, to tell a recompiler fault
 from a system-layer one.
-
-## Known issues
-
-- Portable Ops story comic pages are silent and stop at a fixed frame unless
-  skipped (the comic's opening movie has its sound). After loading a page's
-  sound banks, KCEJ_FS gets no handle for the next music part (the comic
-  names `oss_bgm_bgm01_01_03.sep`, which is not on the disc) and retries an
-  asynchronous read on handle -1 once a second, forever. PPSSPP reads the
-  same banks and plays on, so its lookup must succeed where ours fails.
