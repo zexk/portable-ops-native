@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "profile.hpp"
+#include "savempo.hpp"
 #include "stage_sweep.hpp"
 #include "umd_key_table.hpp"
 
@@ -58,6 +59,8 @@ const GameProfile &game() {
         .save_folders = kSaveFolders,
 
         .adhoc_product_code = "ULUS10290",
+        .infrastructure_host = &mgs::savempo_host,
+        .infrastructure_url = &mgs::savempo_url,
 
         .register_extra_hle = &register_hle,
 
