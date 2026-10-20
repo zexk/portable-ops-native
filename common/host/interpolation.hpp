@@ -15,6 +15,10 @@ inline constexpr portablekit::gpu::interpolation::CutThresholds kInterpolationTh
     .continuous_distance_margin = 600.0f,
     .max_continuous_distance = 8000.0f,
     .max_own_motion = 600.0f,
+    // The engine culls by bounding box, so whatever has its origin on screen
+    // was drawn: a draw only the newer frame has there is another model of
+    // something the older frame drew (a guard changing its level of detail).
+    .bring_edge = 1.0f,
 };
 
 } // namespace mgs
