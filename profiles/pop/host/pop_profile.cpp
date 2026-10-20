@@ -8,7 +8,6 @@
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
-#include "stage_sweep.hpp"
 #include "umd_key_table.hpp"
 
 #include "psprecomp/elf32.hpp"
@@ -19,12 +18,6 @@ namespace {
 constexpr SaveFolder kSaveFolders[] = {
     {"ULUS10290", "Game data", true},
 };
-
-// The engine's stage loader (create, step) and the game's sceKernelDelayThread import
-// stub (the engine always loads at 0x08804000).
-constexpr mgs::StageLoader kStageLoader{0x08804000u + 0x41498u, 0x08804000u + 0x4115Cu, 0x08804000u + 0x159874u};
-
-void register_hle(HleRegistrar &hle) { mgs::register_stage_sweep(hle, kStageLoader); }
 
 // The engine's routine appending a 32-bit value to a network message, and the
 // return address of the lobby join request's call to it (savempo.hpp).
@@ -87,7 +80,6 @@ const GameProfile &game() {
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 
-        .register_extra_hle = &register_hle,
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
         .camera = &mgs::kCameraDriver,

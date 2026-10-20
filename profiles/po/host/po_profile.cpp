@@ -8,7 +8,6 @@
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
-#include "stage_sweep.hpp"
 #include "umd_key_table.hpp"
 
 #include "psprecomp/elf32.hpp"
@@ -20,18 +19,10 @@ constexpr SaveFolder kSaveFolders[] = {
     {"ULUS10202", "Game data", true},
 };
 
-// The engine's stage loader (create, step) and the game's sceKernelDelayThreadCB import
-// stub (the engine always loads at 0x08804000).
-constexpr mgs::StageLoader kStageLoader{0x08804000u + 0x39A20u, 0x08804000u + 0x396E4u, 0x08804000u + 0x1D69ECu};
-
 // The player's input step, the actors' action bitsets, the engine's pad state
 // and its pointer to the control settings.
 constexpr mgs::CameraAddresses kCamera{0x08804000u + 0xB12F8u, 0x08804000u + 0x2F70BCu, 0x08804000u + 0x2753D8u,
                                        0x08804000u + 0x1F11D0u};
-
-void register_hle(HleRegistrar &hle) {
-    mgs::register_stage_sweep(hle, kStageLoader);
-}
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) { mgs::install_camera(runtime, kCamera); }
 
@@ -73,7 +64,6 @@ const GameProfile &game() {
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 
-        .register_extra_hle = &register_hle,
         .patch_loaded_image = &patch_image,
         .camera = &mgs::kCameraDriver,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,

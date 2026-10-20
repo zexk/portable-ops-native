@@ -29,21 +29,34 @@ Portable Ops+ is the same with `pop`, `PortableOpsPlusNative` and
 
 The games load their own modules (sound, file system, zlib) and one stage
 module at a time from the disc. Each runs under the interpreter until it has
-recompiled code of its own. To make that code, play with dumping on, then
-build what was dumped:
+recompiled code of its own.
+
+Stages are made straight from the disc: `stage-images.py` loads each stage
+as the engine does, linking it to the engine with the relocations in the
+stage's `.rlc` file, and writes the code the game runs:
+
+```sh
+nix develop --command python3 scripts/stage-images.py po /path/to/po.iso out/stages-po
+nix develop --command python3 scripts/add-modules.py po out/stages-po
+cmake -S . -B out/po && cmake --build out/po
+```
+
+The other modules come from playing with dumping on, then building what was
+dumped the same way:
 
 ```sh
 MGSPO_DUMP_MODULES=$PWD/out/module-dumps out/po/bin/PortableOpsNative
 nix develop --command python3 scripts/add-modules.py po out/module-dumps
-cmake -S . -B out/po && cmake --build out/po
 ```
 
 A module is identified by its code as it is in memory when it first runs after
-the game has patched it, so every stage you have reached runs natively next
-time. Copies of one stage differ in a few units only, so `add-modules.py`
-moves each unit to `profiles/<edition>/units/`, named by its code, and the
-build compiles it once for all the copies that share it. Import stubs inside a module's code (`KCEJ_FS` has three) are dumped
-beside it as a `.stubs` file and kept out of its compiled code.
+the game has patched it. A stage also runs for a moment before that, which
+`add-modules.py` leaves to the interpreter. Stages of one map (`trneko0800`,
+`0801`, `0802`) differ in a few units only, so `add-modules.py` moves each
+unit to `profiles/<edition>/units/`, named by its code, and the build compiles
+it once for all the stages that share it. Import stubs inside a module's code
+(`KCEJ_FS` has three) are dumped beside it as a `.stubs` file and kept out of
+its compiled code.
 
 ## Testing without a window
 
