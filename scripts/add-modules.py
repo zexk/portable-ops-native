@@ -16,6 +16,8 @@ runs. Then rebuild: cmake -S . -B out/<edition> && cmake --build out/<edition>.
 import hashlib
 import pathlib
 import re
+import shutil
+import struct
 import subprocess
 import sys
 
@@ -23,6 +25,18 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Modules left to the interpreter.
 SKIP = set()
 NAME = re.compile(r'^mod([0-9A-F]{8})_(.+)_([0-9A-F]{16})$')
+# A call below user memory, as recompiled code makes it (a jump there, without
+# a return, is data the recompiler decoded as code).
+LOW_CALL = re.compile(r'ctx\.pc = 0x0[0-7][0-9A-F]{6}u;\n *if \(rt\.invoke_chained_call')
+
+
+def unpatched(name, data):
+    """A stage first runs before the engine has patched its jumps into the
+    engine, which point below user memory until then, and is identified again
+    once patched, about a millisecond later. Only the patched code is worth
+    compiling."""
+    return 'stage' in name and any(word >> 26 == 3 and (word & 0x3FFFFFF) << 2 < 0x08000000
+                                   for (word,) in struct.iter_unpack('<I', data[:len(data) & ~3]))
 
 
 def fnv1a64(data):
@@ -46,6 +60,9 @@ def main():
             continue
         data = dump.read_bytes()
         assert fnv1a64(data) == digest, '%s: hash does not match its name' % dump.name
+        if unpatched(name, data):
+            print('%s: stage before its patch, skipped' % dump.name)
+            continue
         prefix = re.sub(r'\W', '_', dump.stem)
         target = overlays / prefix
         if (target / 'meta.txt').exists():
@@ -84,10 +101,15 @@ def pool_units(overlays):
     owners = {}
     for module in sorted(path for path in overlays.iterdir() if (path / 'meta.txt').exists()):
         prefix = module.name
+        units = sorted(module.glob('generated_unit_*.cpp'))
+        if 'stage' in prefix and any(LOW_CALL.search(unit.read_text()) for unit in units):
+            print('%s: stage before its patch, removed' % prefix)
+            shutil.rmtree(module)
+            continue
         listing = module / 'units.txt'
         names = listing.read_text().split() if listing.exists() else []
         renames = {}
-        for unit in sorted(module.glob('generated_unit_*.cpp')):
+        for unit in units:
             index = int(unit.stem.rsplit('_', 1)[1])
             text = unit.read_text().replace('#include "%s_units.hpp"\n' % prefix, '').replace(prefix, '\0')
             name = 'u' + hashlib.sha1(text.encode()).hexdigest()[:16]
