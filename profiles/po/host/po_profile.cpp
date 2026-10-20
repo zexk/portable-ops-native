@@ -9,6 +9,7 @@
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "umd_key_table.hpp"
+#include "widescreen.hpp"
 
 #include "psprecomp/elf32.hpp"
 
@@ -24,7 +25,13 @@ constexpr SaveFolder kSaveFolders[] = {
 constexpr mgs::CameraAddresses kCamera{0x08804000u + 0xB12F8u, 0x08804000u + 0x2F70BCu, 0x08804000u + 0x2753D8u,
                                        0x08804000u + 0x1F11D0u};
 
-void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) { mgs::install_camera(runtime, kCamera); }
+// The view builder and the x scale it loads.
+constexpr mgs::WidescreenAddresses kWidescreen{0x08804000u + 0x41124u, 0x08804000u + 0x1E5728u};
+
+void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
+    mgs::install_camera(runtime, kCamera);
+    mgs::install_widescreen(runtime, kWidescreen);
+}
 
 } // namespace
 
@@ -66,6 +73,7 @@ const GameProfile &game() {
 
         .patch_loaded_image = &patch_image,
         .camera = &mgs::kCameraDriver,
+        .view_aspect_frame = &mgs::view_aspect_frame,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         // North American console: English, cross confirms.

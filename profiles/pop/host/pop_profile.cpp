@@ -12,6 +12,7 @@
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "umd_key_table.hpp"
+#include "widescreen.hpp"
 
 #include "psprecomp/elf32.hpp"
 
@@ -35,6 +36,9 @@ struct Release {
     std::uint32_t action_flags;
     std::uint32_t pad;
     std::uint32_t globals;
+    // The view builder and the x scale it loads (widescreen.hpp).
+    std::uint32_t build_view;
+    std::uint32_t x_scale;
     std::uint32_t system_language;
     std::uint32_t confirm_button;
 };
@@ -44,19 +48,19 @@ struct Release {
 constexpr Release kRelease{"ULES01003", "ULES-01003", "the European release (version 1.00)",
                            "c4790bf9e3420eb885a64fcedf2ef682b891d70c434092ecb5f1c62a4c86c61b",
                            "8291454649b98b5b51fcd28352dbba42b9ce8722d21a01e84e9a2464cce7ecd3",
-                           0x1446B0u, 0x13966Cu, 0x299A2Cu, 0x1E6930u, 0x17A6D0u, 1u, 1u};
+                           0x1446B0u, 0x13966Cu, 0x299A2Cu, 0x1E6930u, 0x17A6D0u, 0x49968u, 0x170F6Cu, 1u, 1u};
 #elif defined(MGS_REGION_JP)
 // Japanese console: Japanese, circle confirms.
 constexpr Release kRelease{"ULJM05261", "ULJM-05261", "the Japanese release (version 1.03)",
                            "daa34f17a345329d4a14602d58c72c9a70108c2b9ce335451dd2e97260d91bfb",
                            "1f8f93490d7f5cc57f2e8eec6e70c1f5b6474dd367ddbfd31ce87ef78228a2dc",
-                           0x1424DCu, 0x137498u, 0x295E0Cu, 0x1E2D10u, 0x1732B0u, 0u, 0u};
+                           0x1424DCu, 0x137498u, 0x295E0Cu, 0x1E2D10u, 0x1732B0u, 0x48DB4u, 0x16A82Cu, 0u, 0u};
 #else
 // North American console: English, cross confirms.
 constexpr Release kRelease{"ULUS10290", "ULUS-10290", "the North American release (version 1.01)",
                            "b939e63771a74ff47465751cfef8ed4f57c35ddd3009cc99d6607064e789ed91",
                            "61eaaaa771e5dabcca07b6df62137e39709caa62030f5cc8ddc809e333a6943b",
-                           0x142598u, 0x137554u, 0x294D5Cu, 0x1E1C60u, 0x1731F0u, 1u, 1u};
+                           0x142598u, 0x137554u, 0x294D5Cu, 0x1E1C60u, 0x1731F0u, 0x48E1Cu, 0x16A754u, 1u, 1u};
 #endif
 
 constexpr SaveFolder kSaveFolders[] = {
@@ -80,6 +84,7 @@ void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_savempo_mark(runtime, kSaveMpoMark);
+    mgs::install_widescreen(runtime, {kBase + kRelease.build_view, kBase + kRelease.x_scale});
 }
 
 } // namespace
@@ -122,6 +127,7 @@ const GameProfile &game() {
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
         .camera = &mgs::kCameraDriver,
+        .view_aspect_frame = &mgs::view_aspect_frame,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         .system_language = kRelease.system_language,
