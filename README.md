@@ -23,7 +23,8 @@ out/po/bin/PortableOpsNative
 ```
 
 Portable Ops+ is the same with `pop`, `PortableOpsPlusNative` and
-`ULUS10290`.
+`ULUS10290`. Its European and Japanese releases are the editions `pop-eu`
+(`ULES01003`) and `pop-jp` (`ULJM05261`), built from the same profile.
 
 ## Game modules and stages
 
@@ -67,3 +68,22 @@ Useful variables (prefix `MGSPO_` or `MGSPOP_`): `TRACE_IO`, `TRACE_MODULES`,
 `TRACE_AUDIO`, `TRACE_MPEG`, `DUMP_MODULES`, `INPUT_SCRIPT`.
 `PSPRECOMP_NO_AOT=1` runs everything interpreted, to tell a recompiler fault
 from a system-layer one.
+
+## Online play
+
+Portable Ops+ plays on line through SaveMGO's community server by default.
+`server/` is a server of our own, written from the protocol
+(`server/PROTOCOL.md`) with Python's standard library alone:
+
+```sh
+python3 server/mpo_server.py --data out/server-data adduser NAME PASSWORD PLAYER_NAME
+python3 server/mpo_server.py --data out/server-data --web-port 8080 \
+    --game ~/.local/share/PortableOpsPlusNative/ULUS10290/EBOOT.ELF
+MGSPOP_ONLINE_SERVER=127.0.0.1:8080 out/pop/bin/PortableOpsPlusNative
+```
+
+`--game` gives it the game's defaults for the one file the game insists on
+downloading. Each server chooses its own terms, news and banner (see the
+script's help). Logging in, the lobby and hosting a game work; other players
+finding and joining a game do not yet. `<PREFIX>_NET_CAPTURE=<file>` records a
+session's traffic, and `server/decode.py` reads it.

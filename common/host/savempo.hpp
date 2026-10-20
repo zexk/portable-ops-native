@@ -8,7 +8,11 @@
 // - HTTPS is spoken as plain HTTP;
 // - a path naming the policy (terms of use) gets "_savempo" appended, the
 //   server's own version of the page.
+// <PREFIX>_ONLINE_SERVER=host[:port] sends all of it to another server instead,
+// such as our own (server/), whose web pages are then on that port (80 when
+// absent).
 
+#include "profile.hpp"
 #include "psprecomp/runtime.hpp"
 
 #include <cstdint>
@@ -20,10 +24,18 @@ namespace mgs {
 inline constexpr std::string_view kSaveMpoServer = "mpo.savemgo.com";
 inline constexpr std::string_view kSaveMpoStun = "stun.mgo2pc.com";
 
+// The server chosen with <PREFIX>_ONLINE_SERVER, as host[:port], or empty.
+inline std::string online_server() {
+    const char *server = portablekit::env("ONLINE_SERVER");
+    return server != nullptr ? server : "";
+}
+
 inline std::string savempo_host(std::string_view host) {
+    const std::string server = online_server();
+    const bool own = !server.empty();
     if (host.starts_with("mpogate") || host == "mpoweb.konamionline.com" || host == "info.service.konamionline.com")
-        return std::string(kSaveMpoServer);
-    if (host.starts_with("mpostun")) return std::string(kSaveMpoStun);
+        return own ? server.substr(0, server.find(':')) : std::string(kSaveMpoServer);
+    if (host.starts_with("mpostun")) return own ? server.substr(0, server.find(':')) : std::string(kSaveMpoStun);
     return std::string(host);
 }
 
@@ -36,8 +48,10 @@ inline std::string savempo_url(std::string_view url) {
     const std::size_t slash = url.find('/');
     const std::string_view host = url.substr(0, slash);
     std::string path(slash == std::string_view::npos ? std::string_view{} : url.substr(slash));
-    const std::string target = savempo_host(host);
+    std::string target = savempo_host(host);
     if (target == kSaveMpoServer && path.find("policy") != std::string::npos) path += "_savempo";
+    if (const std::string server = online_server(); !server.empty() && target == server.substr(0, server.find(':')))
+        target = server;
     return "http://" + target + path;
 }
 
