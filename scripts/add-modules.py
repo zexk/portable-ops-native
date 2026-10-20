@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Recompile dumped game modules, one library each.
 
-usage: scripts/add-modules.py po|pop [DUMP_DIR]
+usage: scripts/add-modules.py po|pop|pop-eu|pop-jp [DUMP_DIR]
 
 A run with <prefix>_DUMP_MODULES=DUMP_DIR writes the code of every module it
 loads, as it is in memory at its first run (the game patches stage code after

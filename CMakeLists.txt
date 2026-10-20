@@ -6,21 +6,29 @@ project(PortableOpsNative VERSION 0.1.0 LANGUAGES CXX)
 # each edition gets its own build directory:
 #   cmake -S . -B out/po  -G Ninja -DMGS_EDITION=po
 #   cmake -S . -B out/pop -G Ninja -DMGS_EDITION=pop
-set(MGS_EDITION "po" CACHE STRING "Edition to build: po (Portable Ops) or pop (Portable Ops+)")
-set_property(CACHE MGS_EDITION PROPERTY STRINGS po pop)
+# pop-eu and pop-jp are Portable Ops+'s European and Japanese releases.
+set(MGS_EDITION "po" CACHE STRING "Edition to build: po (Portable Ops), pop, pop-eu or pop-jp (Portable Ops+)")
+set_property(CACHE MGS_EDITION PROPERTY STRINGS po pop pop-eu pop-jp)
 
 add_subdirectory(portablekit)
 
 if(MGS_EDITION STREQUAL "po")
     set(target PortableOpsNative)
-elseif(MGS_EDITION STREQUAL "pop")
+    set(profile po)
+elseif(MGS_EDITION MATCHES "^pop(-eu|-jp)?$")
     set(target PortableOpsPlusNative)
+    set(profile pop)
 else()
-    message(FATAL_ERROR "MGS_EDITION must be po or pop, not '${MGS_EDITION}'")
+    message(FATAL_ERROR "MGS_EDITION must be po, pop, pop-eu or pop-jp, not '${MGS_EDITION}'")
 endif()
 
-# Each profile directory holds its own generated/ corpus; common/ is shared MGS code.
+# Each edition's directory holds its own generated/ corpus; the releases of one
+# game share their profile source; common/ is shared MGS code.
 portablekit_add_game(${target}
     PROFILE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/profiles/${MGS_EDITION}"
-    SOURCES host/${MGS_EDITION}_profile.cpp)
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/profiles/${profile}/host/${profile}_profile.cpp")
 target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/common/host")
+if(MGS_EDITION MATCHES "-(eu|jp)$")
+    string(TOUPPER "${CMAKE_MATCH_1}" region)
+    target_compile_definitions(${target} PRIVATE MGS_REGION_${region})
+endif()

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Run one edition under a virtual X server with software Vulkan (lavapipe), so
 # no window opens and screenshots work anywhere. Frames land in out/shots-<edition>.
-# usage: scripts/run-headless.sh po|pop [seconds] [extra env assignments...]
+# usage: scripts/run-headless.sh po|pop|pop-eu|pop-jp [seconds] [extra env assignments...]
 set -euo pipefail
 edition=$1; seconds=${2:-120}; shift $(( $# > 1 ? 2 : 1 ))
 cd "$(dirname "$0")/.."
 case $edition in
   po) program=PortableOpsNative; prefix=MGSPO ;;
-  pop) program=PortableOpsPlusNative; prefix=MGSPOP ;;
-  *) echo "edition must be po or pop" >&2; exit 2 ;;
+  pop|pop-eu|pop-jp) program=PortableOpsPlusNative; prefix=MGSPOP ;;
+  *) echo "edition must be po, pop, pop-eu or pop-jp" >&2; exit 2 ;;
 esac
 mesa=$(nix build nixpkgs#mesa --no-link --print-out-paths | head -1)
 shots=$PWD/out/shots-$edition

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Make every stage's code from the disc, as the game has it when it runs.
 
-usage: scripts/stage-images.py po|pop DISC OUT_DIR
+usage: scripts/stage-images.py po|pop|pop-eu|pop-jp DISC OUT_DIR
 
 The engine loads a stage PRX, starts it, then links it to itself with the
 stage's .rlc file (from its _zar archive): offsets into the engine's text and
@@ -21,6 +21,8 @@ import zlib
 EDITIONS = {
     'po': {'engine': (0x08804000, 0x08804000 + 0x1EED40), 'stage': 0x08B72F00},
     'pop': {'engine': (0x08804000, 0x08804000 + 0x170480), 'stage': 0x08B10600},
+    'pop-jp': {'engine': (0x08804000, 0x08804000 + 0x170540), 'stage': 0x08B11600},
+    'pop-eu': {'engine': (0x08804000, 0x08804000 + 0x176D40), 'stage': 0x08B15000},
 }
 
 

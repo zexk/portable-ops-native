@@ -1,8 +1,11 @@
-// Everything PortableKit has to be told about Metal Gear Solid: Portable Ops+
-// (USA, ULUS10290, disc version 1.01). The framework reads the rest out of the
-// executable. Values were read off the disc: the id and title from
-// PSP_GAME/PARAM.SFO, the hashes from the files, the tag from offset 0xD0 of
-// EBOOT.BIN, the image size from the ELF's program headers.
+// Everything PortableKit has to be told about Metal Gear Solid: Portable Ops+.
+// One source for every release; the build picks one with MGS_REGION (US, EU or
+// JP). The framework reads the rest out of the executable. Values were read
+// off each disc: the id and title from PSP_GAME/PARAM.SFO, the hashes from the
+// files, the tag from offset 0xD0 of EBOOT.BIN, the image size from the ELF's
+// program headers. The engine addresses of the other releases were found by
+// matching the US code they come from, and for the data the engine shares
+// with stages, by linking the same stage for each release (stage-images.py).
 
 #include "camera.hpp"
 #include "interpolation.hpp"
@@ -15,27 +18,64 @@
 namespace portablekit {
 namespace {
 
-constexpr SaveFolder kSaveFolders[] = {
-    {"ULUS10290", "Game data", true},
+constexpr std::uint32_t kBase = 0x08804000u;
+
+struct Release {
+    const char *disc_id;
+    const char *disc_id_display;
+    const char *release_name;
+    // EBOOT.BIN, and what it decrypts to (identical to BOOT.BIN on the disc).
+    const char *encrypted_executable_sha256;
+    const char *executable_sha256;
+    // The engine's routine appending a 32-bit value to a network message, and
+    // the return address of the lobby join request's call to it (savempo.hpp).
+    std::uint32_t append_u32;
+    std::uint32_t join_return;
+    // The actors' action bitsets, the engine's pad state and its globals.
+    std::uint32_t action_flags;
+    std::uint32_t pad;
+    std::uint32_t globals;
+    std::uint32_t system_language;
+    std::uint32_t confirm_button;
 };
 
-// The engine's routine appending a 32-bit value to a network message, and the
-// return address of the lobby join request's call to it (savempo.hpp).
-constexpr mgs::SaveMpoMark kSaveMpoMark{0x08804000u + 0x142598u, 0x08804000u + 0x137554u};
+#if defined(MGS_REGION_EU)
+// Five languages on the disc; English until the console's language is a setting.
+constexpr Release kRelease{"ULES01003", "ULES-01003", "the European release (version 1.00)",
+                           "c4790bf9e3420eb885a64fcedf2ef682b891d70c434092ecb5f1c62a4c86c61b",
+                           "8291454649b98b5b51fcd28352dbba42b9ce8722d21a01e84e9a2464cce7ecd3",
+                           0x1446B0u, 0x13966Cu, 0x299A2Cu, 0x1E6930u, 0x17A6D0u, 1u, 1u};
+#elif defined(MGS_REGION_JP)
+// Japanese console: Japanese, circle confirms.
+constexpr Release kRelease{"ULJM05261", "ULJM-05261", "the Japanese release (version 1.03)",
+                           "daa34f17a345329d4a14602d58c72c9a70108c2b9ce335451dd2e97260d91bfb",
+                           "1f8f93490d7f5cc57f2e8eec6e70c1f5b6474dd367ddbfd31ce87ef78228a2dc",
+                           0x1424DCu, 0x137498u, 0x295E0Cu, 0x1E2D10u, 0x1732B0u, 0u, 0u};
+#else
+// North American console: English, cross confirms.
+constexpr Release kRelease{"ULUS10290", "ULUS-10290", "the North American release (version 1.01)",
+                           "b939e63771a74ff47465751cfef8ed4f57c35ddd3009cc99d6607064e789ed91",
+                           "61eaaaa771e5dabcca07b6df62137e39709caa62030f5cc8ddc809e333a6943b",
+                           0x142598u, 0x137554u, 0x294D5Cu, 0x1E1C60u, 0x1731F0u, 1u, 1u};
+#endif
+
+constexpr SaveFolder kSaveFolders[] = {
+    {kRelease.disc_id, "Game data", true},
+};
+
+constexpr mgs::SaveMpoMark kSaveMpoMark{kBase + kRelease.append_u32, kBase + kRelease.join_return};
 
 // The player's input step lives in each stage module: the shape of its first
-// twelve instructions, then the actors' action bitsets and the engine's pad
-// state in the executable.
+// twelve instructions, the same in every release.
 constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060000u, 0x24070000u,
                                                0xafb10000u, 0x00a08821u, 0x24050000u, 0xafb00000u,
                                                0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
-constexpr std::uint32_t kActionFlags = 0x08804000u + 0x294D5Cu;
-constexpr std::uint32_t kPad = 0x08804000u + 0x1E1C60u;
-constexpr std::uint32_t kGlobals = 0x08804000u + 0x1731F0u;
 
 void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                        std::span<const std::uint8_t> code) {
-    if (name == "mgp_stage") mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kActionFlags, kPad, kGlobals);
+    if (name == "mgp_stage")
+        mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kBase + kRelease.action_flags,
+                                      kBase + kRelease.pad, kBase + kRelease.globals);
 }
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
@@ -50,33 +90,32 @@ const GameProfile &game() {
         .project_name = "Portable Ops+ Native",
         .env_prefix = "MGSPOP",
         .data_organization = "PortableOpsPlusNative",
-        .data_application = "ULUS10290",
+        .data_application = kRelease.disc_id,
 
-        .disc_id = "ULUS10290",
-        .disc_id_display = "ULUS-10290",
+        .disc_id = kRelease.disc_id,
+        .disc_id_display = kRelease.disc_id_display,
         .game_title = "METAL GEAR SOLID PORTABLE OPS +",
         .executable_path_on_disc = "PSP_GAME/SYSDIR/EBOOT.BIN",
         .param_sfo_path_on_disc = "PSP_GAME/PARAM.SFO",
-        .release_name = "the North American release (version 1.01)",
-        // EBOOT.BIN, and what it decrypts to (identical to BOOT.BIN on the disc).
-        .encrypted_executable_sha256 = "b939e63771a74ff47465751cfef8ed4f57c35ddd3009cc99d6607064e789ed91",
-        .executable_sha256 = "61eaaaa771e5dabcca07b6df62137e39709caa62030f5cc8ddc809e333a6943b",
+        .release_name = kRelease.release_name,
+        .encrypted_executable_sha256 = kRelease.encrypted_executable_sha256,
+        .executable_sha256 = kRelease.executable_sha256,
         .decryption_tag = mgs::kUmdTag,
         .decryption_key = {},
         .decryption_key_table = mgs::kUmdKeyTable,
 
-        // Relocatable; the image with BSS ends at 0x295480, well inside the
-        // 32 MiB of a PSP-1000 at the usual user base.
+        // Relocatable; the image with BSS ends at 0x29A180 at most (EU), well
+        // inside the 32 MiB of a PSP-1000 at the usual user base.
         .load_base = psprecomp::kDefaultPspUserLoadBase,
         .guest_ram_bytes = 32u * 1024u * 1024u,
         .boot_path = "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN",
         // Stage code arrives as modules (PSP_GAME/USRDIR/stage), not overlay slots.
         .overlay_slots = {},
 
-        .save_game_name = "ULUS10290",
+        .save_game_name = kRelease.disc_id,
         .save_folders = kSaveFolders,
 
-        .adhoc_product_code = "ULUS10290",
+        .adhoc_product_code = kRelease.disc_id,
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 
@@ -85,9 +124,8 @@ const GameProfile &game() {
         .camera = &mgs::kCameraDriver,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
-        // North American console: English, cross confirms.
-        .system_language = 1u,
-        .confirm_button = 1u,
+        .system_language = kRelease.system_language,
+        .confirm_button = kRelease.confirm_button,
     };
     return profile;
 }
