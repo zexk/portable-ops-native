@@ -27,6 +27,7 @@
 #include <iostream>
 #include <span>
 #include <numbers>
+#include <optional>
 
 namespace mgs {
 
@@ -210,33 +211,99 @@ inline void install_camera(psprecomp::Runtime &runtime, CameraAddresses addresse
     }
 }
 
+// Where exactly one place in `code` has `shape`, each word compared after
+// `shape_of`; nullopt where none or several do.
+template <typename ShapeOf>
+[[nodiscard]] std::optional<std::uint32_t> find_shape(std::span<const std::uint8_t> code,
+                                                      std::span<const std::uint32_t> shape, ShapeOf shape_of) {
+    const auto word = [&](std::size_t at) {
+        std::uint32_t value = 0u;
+        std::memcpy(&value, code.data() + at, sizeof(value));
+        return shape_of(value);
+    };
+    std::optional<std::uint32_t> found;
+    for (std::size_t at = 0; at + 4u * shape.size() <= code.size(); at += 4u) {
+        std::size_t k = 0;
+        while (k < shape.size() && word(at + 4u * k) == shape[k]) ++k;
+        if (k < shape.size()) continue;
+        if (found) return std::nullopt;  // more than one: not this
+        found = static_cast<std::uint32_t>(at);
+    }
+    return found;
+}
+
 // PO+ keeps the player's code in each stage module, at a different place in
 // each: the input step is found by the shape of its first instructions, and
 // only where exactly one place has it.
 inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
                                      std::span<const std::uint8_t> code, std::span<const std::uint32_t> shape,
                                      std::uint32_t action_flags, std::uint32_t pad, std::uint32_t globals) {
-    const auto word = [&](std::size_t at) {
-        std::uint32_t value = 0u;
-        std::memcpy(&value, code.data() + at, sizeof(value));
-        return code_shape(value);
-    };
-    std::size_t found = code.size();
-    for (std::size_t at = 0; at + 4u * shape.size() <= code.size(); at += 4u) {
-        std::size_t k = 0;
-        while (k < shape.size() && word(at + 4u * k) == shape[k]) ++k;
-        if (k < shape.size()) continue;
-        if (found != code.size()) return;  // more than one: not this
-        found = at;
+    if (const auto found = find_shape(code, shape, code_shape))
+        install_camera(runtime, {base + *found, action_flags, pad, globals});
+}
+
+// The camera's own swing behind the player (Settings::camera_follow).
+//
+// Read from the executable: in its ordinary mode the camera turns itself
+// towards the player's facing in one routine, by a rule each stage's camera
+// actor sets in its parameters (+0x68; parameter 'C'): 0 never, 1 when the
+// player faces well away from the camera and the camera stick is idle, 2
+// whenever the stick is idle. The same routine also runs the recentre on its
+// button. Off runs it with the rule at 0, so the camera stays where the
+// player put it and the button still recentres it.
+struct CameraFollowState {
+    psprecomp::Runtime::RecompiledFunction swing = nullptr;
+};
+inline CameraFollowState camera_follow_state;
+
+inline void camera_swing(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
+    if (portablekit::settings::current().camera_follow) {
+        camera_follow_state.swing(rt, ctx);
+        return;
     }
-    if (found == code.size()) return;
-    install_camera(runtime, {base + static_cast<std::uint32_t>(found), action_flags, pad, globals});
+    auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
+    const std::uint32_t rule = ctx.gpr[4] + 0x68u;
+    const std::uint32_t stage_rule = memory.load32(rule);
+    memory.store32(rule, 0u);
+    camera_follow_state.swing(rt, ctx);
+    memory.store32(rule, stage_rule);
+}
+
+inline void install_camera_follow(psprecomp::Runtime &runtime, std::uint32_t swing) {
+    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(swing);
+    if (original == nullptr || original == &camera_swing) return;
+    camera_follow_state.swing = original;
+    runtime.register_function(swing, &camera_swing, "mgs_camera_swing");
+    std::cout << "[camera-follow] the camera's swing behind the player can be turned off at 0x" << std::hex
+              << swing << std::dec << std::endl;
+}
+
+// The start of the swing in PO+'s stage modules, but for jump targets, address
+// halves and float constants' offsets, which relocation and layout change. The
+// rule's load (lw v1, 0x68(a0)) is compared whole.
+inline constexpr std::uint32_t kCameraSwingShape[] = {
+    0x27bdff90u, 0xafb3004cu, 0x24020001u, 0x3c130000u, 0xafb10044u, 0x00008821u, 0xafb00040u, 0x00808021u,
+    0xe7b50064u, 0xafbf0050u, 0xafb20048u, 0xe7b60068u, 0xe7b40060u, 0x8c830068u, 0x106200b9u, 0xc6750000u,
+    0x24020002u, 0x506200afu, 0xc4810000u, 0x0c000000u};
+
+inline void install_camera_follow_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
+                                            std::span<const std::uint8_t> code) {
+    const auto relocated_out = [](std::uint32_t word) {
+        switch (word >> 26u) {
+        case 0x02u: case 0x03u: return word & 0xfc000000u;
+        case 0x0fu: case 0x31u: return word & 0xffff0000u;
+        default: return word;
+        }
+    };
+    if (const auto found = find_shape(code, kCameraSwingShape, relocated_out))
+        install_camera_follow(runtime, base + *found);
 }
 
 inline constexpr portablekit::CameraDriver kCameraDriver{
     .frame = &camera_frame,
     .driving = &camera_driving,
     .swaps_first_person = true,
+    .follows = true,
 };
 
 } // namespace mgs

@@ -14,7 +14,9 @@ inline constexpr portablekit::gpu::interpolation::CutThresholds kInterpolationTh
     .max_camera_distance = 2000.0f,
     .continuous_distance_margin = 600.0f,
     .max_continuous_distance = 8000.0f,
-    .max_own_motion = 600.0f,
+    // Rolling moves animated mesh points up to 1,010 units per game frame
+    // in PO; 600 rejected individual body parts and held their older poses.
+    .max_own_motion = 1200.0f,
     // The engine culls by bounding box, so whatever has its origin on screen
     // was drawn: a draw only the newer frame has there is another model of
     // something the older frame drew (a guard changing its level of detail).
