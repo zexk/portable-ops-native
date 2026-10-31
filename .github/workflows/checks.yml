@@ -1,0 +1,19 @@
+name: Source checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  packaging:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Check packaging without game data or builds
+        run: |
+          bash -n scripts/*.sh
+          bash scripts/test-package-config.sh
+          python3 scripts/test-package-windows.py
+          python3 scripts/test-release-audit.py
+          python3 -m compileall -q scripts server
+          git diff --check

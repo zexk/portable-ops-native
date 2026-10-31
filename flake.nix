@@ -3,14 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # The reverse-engineering workspace: decrypted-module tools, function
-    # boundaries, NID data and the PPSSPP boot comparison. Local until it is
-    # published.
-    poplusplus.url = "git+file:///path/to/local-checkout";
   };
 
   outputs =
-    { nixpkgs, poplusplus, ... }:
+    { nixpkgs, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
@@ -35,7 +31,6 @@
           ];
           # PortableKit builds FFmpeg itself by default; use the system one.
           PORTABLEKIT_FFMPEG = "system";
-          POPLUSPLUS = "${poplusplus}";
         };
       });
 

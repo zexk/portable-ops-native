@@ -1,0 +1,26 @@
+{
+  "status": "NOT_TESTED",
+  "artifact": null,
+  "sha256": null,
+  "edition": null,
+  "source_commit": null,
+  "portablekit_commit": null,
+  "toolchain": null,
+  "tester": null,
+  "tested_at": null,
+  "os": null,
+  "cpu": null,
+  "ram_gib": null,
+  "gpu": null,
+  "driver": null,
+  "checks": {
+    "clean_machine_launch": "NOT_TESTED",
+    "first_run_and_recovery": "NOT_TESTED",
+    "save_round_trip_and_upgrade": "NOT_TESTED",
+    "gameplay_completion": "NOT_TESTED",
+    "controls_audio_rendering": "NOT_TESTED",
+    "performance_and_long_session": "NOT_TESTED",
+    "advertised_multiplayer": "NOT_TESTED"
+  },
+  "issues": []
+}

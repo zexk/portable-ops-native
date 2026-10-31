@@ -1,18 +1,60 @@
 # Portable Ops Native
 
 Metal Gear Solid: Portable Ops (ULUS-10202, 1.02) and Portable Ops+ (ULUS-10290,
-1.01) as native Linux programs, by static recompilation on
+1.01) as native PC programs, by static recompilation on
 [PortableKit](https://github.com/zexk/PortableKit) (a fork of
 [TeamGDB/PortableKit](https://github.com/TeamGDB/PortableKit) carrying the
 fixes these games need, on branch `mgs`). Vulkan and SDL3.
 
-Nothing from the games is in this repository. Bring your own disc images; the
-recompiled code is generated from them on your machine.
+No disc images or generated game code are tracked in this repository. Planned
+releases provide precompiled programs; players supply their own
+supported disc image. No release artifacts are approved yet. Maintainers
+generate and compile the native game code before packaging.
+
+See [player support](SUPPORT.md), [release gates](docs/RELEASE.md) and
+[unreleased changes](CHANGELOG.md). Public download location, original-code
+license, release version and multiplayer scope remain open decisions.
+
+## Local Linux packages
+
+Maintainers can build both North American editions locally after generating
+both main corpora and their module corpora (`profiles/<edition>/generated/`,
+`overlays/` and `units/`):
+
+```sh
+nix develop --command scripts/package-linux.sh both
+```
+
+The build uses Docker or Podman and the pinned Steam Runtime SDK. The wrapper
+needs Python 3.11+ (provided by `nix develop`, or your host environment).
+Players need neither Nix nor a compiler. Builds are resumable. Use
+`po` or `pop` instead of `both` to build one edition, or add `--skip-build` to
+repack an already staged build. Archives, checksums, build information and
+FFmpeg source land in `out/release-linux-{po,pop}/dist/`. This builds thousands
+of units; the default is two compile jobs, with a 2 GiB compiler cache per
+edition. `scripts/test-package-config.sh` checks edition selection without
+starting a build. These scripts use the accompanying local changes to
+PortableKit's Linux release scripts.
+
+Extract the entire archive and run `PortableOpsNative` or
+`PortableOpsPlusNative`. With no installed assets, the built-in setup asks for
+the ISO, validates it and prepares game data before launching. Later launches
+start the game directly. `--install` opens setup again. Data and saves stay
+in the user's data directory when the program is replaced.
+
+## Local Windows packages
+
+Windows x64 preparation covers both editions. Follow
+[the Windows build and packaging recipe](packaging/windows/BUILDING.md).
+`scripts/package-windows.py` packages existing release builds into portable
+ZIPs with runtime DLLs and native modules; it never compiles anything or
+ships a compiler. Windows builds and first-run launch checks remain pending.
 
 ## Build
 
 ```sh
-git clone --recursive <this repository>
+# From a source checkout:
+git submodule update --init --recursive
 nix develop
 cmake -S . -B out/po  -G Ninja -DMGS_EDITION=po
 cmake --build out/po            # first build: no game code yet
