@@ -495,10 +495,35 @@ typedef struct {
     user_t *user;
     uint8_t challenge[16];
     size_t challenge_length;
+    char ip[16];      /* the peer's address: a host's public address in 4321 */
+    uint8_t lan[18];  /* from 4700: LAN address[16], u16 game port */
 } client_t;
 
 static client_t clients[MAX_CLIENTS];
 static int client_count;
+
+/* A hosted game: the host's 4b10 settings, plain, as the host sent them. */
+#define SETTINGS_SIZE 315
+#define MAX_GAMES 64
+typedef struct {
+    uint32_t id;
+    sock_t host;  /* the host's lobby connection; the game ends with it */
+    user_t *user;
+    char ip[16];
+    uint8_t lan[18];
+    uint8_t settings[SETTINGS_SIZE];
+} game_t;
+
+static game_t games[MAX_GAMES];
+static int game_count;
+static uint32_t next_game = 1;
+
+static game_t *game_by_id(uint32_t id) {
+    for (int i = 0; i < game_count; i++)
+        if (games[i].id == id)
+            return &games[i];
+    return NULL;
+}
 
 static void send_all(sock_t fd, const void *data, size_t n) {
     const char *p = data;
@@ -668,6 +693,79 @@ static void player_record(uint8_t *out, const user_t *user) {
     put_fixed(out + 4 + 16 + 13, "emblem", 16);
 }
 
+/* 4b10's settings (EBOOT 0x13c6a4): name[16], comment[128], u8 locked,
+ * password[16], u8, then the rules from the settings struct's 0x234 on. */
+enum { S_NAME = 0, S_COMMENT = 16, S_LOCKED = 144, S_PASSWORD = 145, S_A7 = 161, S_RULES = 162 };
+
+/* 4b13 (parsed at 0x13d1f8) carries the same rules with fields 4b10 has not:
+ * the sizes of the rule fields in order, negative where 4b13 has a field of
+ * that size that 4b10 lacks (struct 0x266, 0x26c, 0x272, 0x278, 0x2e8, 0x2ec,
+ * 0x2f0, 0x2f8; sent as zero). */
+static const signed char DETAIL_RULES[] = {
+    32, 1, 1, 1, 4, 4, 4, 1, 1, -1, 4, -4, 2, -2, 4, -4, 2, 1, 4, 75, -2, -4, -1, 2, 1, 2, 2, -4, 5};
+
+/* 4b13: u32 result, u32 game id, then the game's settings and players. */
+static size_t game_details(uint8_t *out, const game_t *g) {
+    const uint8_t *s = g->settings;
+    put_u32(out + 4, g->id);
+    memcpy(out + 8, s + S_NAME, 16);
+    memcpy(out + 24, s + S_COMMENT, 128);
+    out[152] = s[S_LOCKED], out[153] = s[S_A7];
+    size_t n = 154 + 12, from = S_RULES; /* struct 0x304, 0x308, 0x30c: zero */
+    for (size_t i = 0; i < sizeof DETAIL_RULES; i++) {
+        int size = DETAIL_RULES[i];
+        if (size > 0)
+            memcpy(out + n, s + from, size), from += size;
+        n += size > 0 ? size : -size;
+    }
+    /* Players, up to nine, until the payload ends: u32 user id, name[16], u8,
+     * five u32. Only the host so far; the u8 and the last u32 are SaveMGO's
+     * values for its host (0xfe, 100), meaning unknown. */
+    put_u32(out + n, g->user->id);
+    put_fixed(out + n + 4, g->user->player, 16);
+    out[n + 20] = 0xfe;
+    put_u32(out + n + 37, 100);
+    return n + 41;
+}
+
+/* One 4b02 entry (parsed at 0x13ac24 into 0x44-byte slots): u32 game id,
+ * name[16], u8 locked, u8 (struct 0xa7), three u32, four u8, bytes[2]
+ * (struct 0x2f1), u8, u32, two u8, u32, u16, u32, u8. Read by the online
+ * menu, a stage module; beyond what matches the struct, from SaveMGO's one
+ * listed game: the first two u8 are the round's (mode, map) pair, as the
+ * struct's 0x234/0x244 (SaveMGO's game was in its second round). */
+static void game_entry(uint8_t *out, const game_t *g) {
+    const uint8_t *s = g->settings;
+    put_u32(out, g->id);
+    memcpy(out + 4, s + S_NAME, 16);
+    out[20] = s[S_LOCKED], out[21] = s[S_A7];
+    out[34] = s[S_RULES], out[35] = s[S_RULES + 1];
+    out[37] = 7;                  /* SaveMGO's value, meaning unknown */
+    memcpy(out + 38, s + 303, 2); /* struct 0x2f1 */
+    out[40] = 1;                  /* SaveMGO: 1, one player? */
+    put_u32(out + 41, 100);       /* SaveMGO's value, as its host player's last u32 */
+}
+
+static void end_games(sock_t host) {
+    for (int i = game_count - 1; i >= 0; i--)
+        if (games[i].host == host) {
+            printf("lobby game %u ended\n", games[i].id);
+            games[i] = games[--game_count];
+        }
+}
+
+/* The three 4904 and 4905 pages (700 bytes, u32 page first; 4905's at 4)
+ * that follow 4901 and 4903: contents not understood, zero. */
+static void send_pages(client_t *c, uint8_t *buffer) {
+    for (uint32_t page = 0; page < 3; page++) {
+        memset(buffer, 0, 700);
+        put_u32(buffer, page);
+        send_message(c, 0x4904, buffer, 700);
+        put_u32(buffer, 0), put_u32(buffer + 4, page);
+        send_message(c, 0x4905, buffer, 700);
+    }
+}
+
 static int lobby(client_t *c, uint16_t command, const uint8_t *payload, size_t length) {
     static uint8_t reply[1024];
     memset(reply, 0, sizeof reply);
@@ -692,26 +790,85 @@ static int lobby(client_t *c, uint16_t command, const uint8_t *payload, size_t l
     } else if (command == 0x4900) {
         player_record(reply, c->user);
         send_message(c, 0x4901, reply, 1024);
-        for (uint32_t page = 0; page < 3; page++) {
-            memset(reply, 0, 700);
-            put_u32(reply, page);
-            send_message(c, 0x4904, reply, 700);
-            put_u32(reply, 0), put_u32(reply + 4, page);
-            send_message(c, 0x4905, reply, 700);
-        }
+        send_pages(c, reply);
     } else if (command == 0x4700) {
+        /* u16, LAN address[16], u16 game port, u16 */
+        if (length >= 20)
+            memcpy(c->lan, payload + 2, 18);
         send_u32(c, 0x4701, 0);
     } else if (command == 0x4702) {
         send_u32(c, 0x4703, 0);
     } else if (command == 0x4b00) {
-        /* No games are listed yet. */
+        /* u32 result, then games (one 4b02 each here; the client reads
+         * entries until a message ends), then u32 result. */
         send_u32(c, 0x4b01, 0);
+        for (int i = 0; i < game_count; i++) {
+            game_entry(reply, &games[i]);
+            send_message(c, 0x4b02, reply, 58);
+            memset(reply, 0, 58);
+        }
         send_u32(c, 0x4b03, 0);
+    } else if (command == 0x4b10) {
+        /* Create a game: Blowfish(settings), 320 bytes; 4b11 is u32 result. */
+        if (length < 320 || game_count == MAX_GAMES) {
+            send_u32(c, 0x4b11, 0xFFFFFFFF);
+            return 1;
+        }
+        end_games(c->fd);
+        game_t *g = &games[game_count++];
+        uint8_t plain[320];
+        memcpy(plain, payload, 320);
+        blowfish(plain, 320, 1);
+        memset(g, 0, sizeof *g);
+        g->id = next_game++, g->host = c->fd, g->user = c->user;
+        memcpy(g->ip, c->ip, 16), memcpy(g->lan, c->lan, 18);
+        memcpy(g->settings, plain, SETTINGS_SIZE);
+        printf("lobby %s game %u '%.16s' by %s\n", c->peer, g->id, (char *)plain, c->user->player);
+        send_u32(c, 0x4b11, 0);
+    } else if (command == 0x4b12) {
+        game_t *g = length >= 4 ? game_by_id(get_u32(payload)) : NULL;
+        if (g)
+            send_message(c, 0x4b13, reply, game_details(reply, g));
+        else
+            send_u32(c, 0x4b13, 1);
+    } else if (command == 0x4320) {
+        /* Join: Blowfish(u32 game id, password[16]); 4321 is u32 result, the
+         * host's public address[16] and port, LAN address[16] and port. */
+        uint8_t plain[24] = {0};
+        memcpy(plain, payload, length < 24 ? length : 24);
+        blowfish(plain, 24, 1);
+        game_t *g = game_by_id(get_u32(plain));
+        if (!g || (g->settings[S_LOCKED] == 1 &&
+                   strncmp((char *)plain + 4, (char *)g->settings + S_PASSWORD, 16))) {
+            printf("lobby %s join of game %u refused\n", c->peer, get_u32(plain));
+            send_u32(c, 0x4321, 1);
+            return 1;
+        }
+        printf("lobby %s joins game %u\n", c->peer, g->id);
+        /* Behind the same address as its host (one machine, one NAT), a
+         * joiner can only reach the host on its LAN: the joiner tries the
+         * public address alone, about eight times over 15 s, then sends 4322. */
+        memcpy(reply + 4, strcmp(g->ip, c->ip) ? g->ip : (char *)g->lan, 16);
+        memcpy(reply + 20, g->lan + 16, 2); /* the host's game port, as on its LAN */
+        memcpy(reply + 22, g->lan, 18);
+        send_message(c, 0x4321, reply, 40);
+    } else if (command == 0x4340 || command == 0x4344) {
+        /* The host, about a player: 4340 u32 user id when one joins (0x13dd98),
+         * 4344 u32 user id and u8 (0x13e210). The reply, u32 result and u32
+         * user id, must name the player: the host matches it against its
+         * pending requests (0x13de8c, 0x13e320) before answering the joiner. */
+        if (length >= 4)
+            memcpy(reply + 4, payload, 4);
+        send_message(c, command + 1, reply, 8);
+    } else if (command == 0x4316 || command == 0x4398) {
+        /* Hosting began; the host's periodic u32 and (user id, value) pairs. */
+        send_u32(c, command + 1, 0);
     } else if (command == 0x4902) {
         user_t *user = length >= 4 ? user_by_id(get_u32(payload)) : NULL;
         if (user)
             player_record(reply + 4, user);
         send_message(c, 0x4903, reply, 512);
+        send_pages(c, reply); /* SaveMGO follows 4903 with them too; the client waits for them */
     } else if (command == 0x43b0 || command == 0x43b2 || command == 0x43b4) {
         send_u32(c, command + 1, 0);
     } else if (command == 0x43a0) {
@@ -895,6 +1052,7 @@ static void default_address(void) {
 
 static void close_client(int i) {
     printf("%s %s closed\n", KIND_NAMES[clients[i].kind], clients[i].peer);
+    end_games(clients[i].fd);
     closesocket(clients[i].fd);
     free(clients[i].buffer);
     clients[i] = clients[--client_count];
@@ -980,6 +1138,7 @@ int main(int argc, char **argv) {
             memset(c, 0, sizeof *c);
             c->fd = fd, c->kind = (enum kind)k, c->buffer = malloc(BUFFER_SIZE);
             snprintf(c->peer, sizeof c->peer, "%s:%u", inet_ntoa(from.sin_addr), ntohs(from.sin_port));
+            snprintf(c->ip, sizeof c->ip, "%s", inet_ntoa(from.sin_addr));
             if (k != WEB)
                 printf("%s %s connected\n", KIND_NAMES[k], c->peer);
         }

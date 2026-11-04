@@ -129,6 +129,6 @@ MGSPOP_ONLINE_SERVER=127.0.0.1:8080 out/pop/bin/PortableOpsPlusNative
 
 `--game` gives it the game's defaults for the one file the game insists on
 downloading. Each server chooses its own terms, news and banner (see
-`mpo-server --help`). Logging in, the lobby and hosting a game work; other players
-finding and joining a game do not yet. `<PREFIX>_NET_CAPTURE=<file>` records a
+`mpo-server --help`). Logging in, the lobby, hosting, and finding and joining a game work
+(tested with two instances on one machine). `<PREFIX>_NET_CAPTURE=<file>` records a
 session's traffic, and `server/decode.py` reads it.
