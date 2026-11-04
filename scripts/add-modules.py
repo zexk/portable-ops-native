@@ -78,7 +78,9 @@ def main():
                 start, end = (int(text, 16) for text in line.split('-'))
                 exclude += ['--exclude', '0x%X-0x%X' % (start, end)]
         subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)] + exclude, check=True)
-        subprocess.run([str(recomp), str(elf), '--auto', str(target), '0x%08X' % base, '--prefix', prefix],
+        # --compact: only the code the analysis reaches, entries only where
+        # control arrives; the rest runs in the interpreter.
+        subprocess.run([str(recomp), str(elf), '--auto', str(target), '0x%08X' % base, '--prefix', prefix, '--compact'],
                        check=True, stdout=subprocess.DEVNULL)
         elf.unlink()
         (target / 'meta.txt').write_text('base=0x%08X\nname=%s\nsize=%d\ncode_size=%d\nhash=0x%016X\nsource=%s\n'
