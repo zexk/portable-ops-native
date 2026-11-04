@@ -36,6 +36,9 @@ struct CameraAddresses {
     std::uint32_t action_flags;  // per-actor action bitsets, 0x1c words each
     std::uint32_t pad;           // the engine's pad state: +0x26 movement yaw
     std::uint32_t globals;       // where the engine keeps the pointer to its control settings
+    // The game's own flag setter, called where one is given (PO+, whose setter
+    // checks the local player's flags against checksums and hangs on a mismatch).
+    std::uint32_t set_action = 0u;
 };
 
 struct CameraState {
@@ -70,8 +73,21 @@ constexpr float kInputPerDegree = 65536.0f / 360.0f / kUnitsPerInput;
 
 // Sets an action flag as the game does (0xcb58c in PO): in the shared bitset
 // and in the actor's own copy at +0xb84 (the actor table sits 0x5c before it).
-inline void set_action(psprecomp::GuestMemory &memory, std::uint32_t player, std::uint32_t flag) {
+// PO+ keeps the copy at +0xbb0 and checksums both for the local player, so
+// there the game's setter (index, flags..., -1) runs on a copy of the context.
+inline void set_action(psprecomp::Runtime &runtime, const psprecomp::AllegrexContext &ctx, std::uint32_t player,
+                       std::uint32_t flag) {
+    auto &memory = runtime.memory();
     const std::uint32_t index = memory.load32(memory.load32(player + 0x4cu) + 0x28u);
+    if (camera_state.addresses.set_action != 0u) {
+        psprecomp::AllegrexContext call = ctx;
+        call.gpr[4] = index;
+        call.gpr[5] = flag;
+        call.gpr[6] = 0xffffffffu;
+        call.gpr[31] = 0u;
+        (void)runtime.invoke_isolated_aot(camera_state.addresses.set_action, call);
+        return;
+    }
     const std::uint32_t bit = 1u << (flag & 31u);
     const std::uint32_t word = camera_state.addresses.action_flags + 4u * (index * 0x1cu + (flag >> 5u));
     memory.store32(word, memory.load32(word) | bit);
@@ -81,7 +97,8 @@ inline void set_action(psprecomp::GuestMemory &memory, std::uint32_t player, std
     memory.store32(own, memory.load32(own) | bit);
 }
 
-inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t player) {
+inline void feed_camera_stick(psprecomp::Runtime &runtime, const psprecomp::AllegrexContext &ctx, std::uint32_t player) {
+    auto &memory = runtime.memory();
     using portablekit::camera::Source;
     const portablekit::camera::Rate stick = portablekit::camera::rate(Source::Stick);
     const portablekit::camera::Turn mouse = portablekit::camera::take(Source::Mouse);
@@ -137,7 +154,7 @@ inline void feed_camera_stick(psprecomp::GuestMemory &memory, std::uint32_t play
     // held, and while it turns sideways have the movement's reference follow
     // the camera, so Snake walks where the turned camera looks.
     if (x != 0.0f || y != 0.0f) memory.store32(player + 0x44u, memory.load32(player + 0x44u) | 0x40u);
-    if (static_cast<std::int8_t>(x) != 0) set_action(memory, player, 0xd7u);
+    if (static_cast<std::int8_t>(x) != 0) set_action(runtime, ctx, player, 0xd7u);
 }
 
 // The stick is read where the game reads its own; motion sources (mouse,
@@ -181,7 +198,7 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
     const std::uint32_t player = ctx.gpr[4];
     camera_state.player_input(rt, ctx);
     const portablekit::settings::Settings &settings = portablekit::settings::current();
-    if (settings.analog_camera) feed_camera_stick(memory, player);
+    if (settings.analog_camera) feed_camera_stick(static_cast<psprecomp::Runtime &>(rt), ctx, player);
     if (settings.swap_sticks_first_person && first_person_swapped(memory, player)) swap_sticks(memory, player);
 }
 
@@ -237,9 +254,10 @@ template <typename ShapeOf>
 // only where exactly one place has it.
 inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
                                      std::span<const std::uint8_t> code, std::span<const std::uint32_t> shape,
-                                     std::uint32_t action_flags, std::uint32_t pad, std::uint32_t globals) {
+                                     std::uint32_t action_flags, std::uint32_t pad, std::uint32_t globals,
+                                     std::uint32_t set_action) {
     if (const auto found = find_shape(code, shape, code_shape))
-        install_camera(runtime, {base + *found, action_flags, pad, globals});
+        install_camera(runtime, {base + *found, action_flags, pad, globals, set_action});
 }
 
 // The camera's own swing behind the player (Settings::camera_follow).
