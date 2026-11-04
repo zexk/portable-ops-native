@@ -22,4 +22,5 @@ Do not download individual DLLs from third-party DLL sites.
 
 Native game code is included; disc images and PSP executables are not.
 Online play is incomplete: finding and joining other players' games does
-not yet work. See licenses/ for third-party software notices.
+not yet work. Portable Ops+ includes mpo-server, an experimental server
+of its own (run it with --help). See licenses/ for third-party software notices.

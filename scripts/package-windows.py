@@ -50,6 +50,8 @@ def validate_build(build, edition, profile):
         raise ValueError(f'{profile}: no module corpus')
     files = [build / 'bin' / (TARGETS[edition] + '.exe')]
     files += [build / 'bin' / 'overlays' / (name + '.dll') for name in modules]
+    if edition == 'pop':
+        files.append(build / 'bin' / 'mpo-server.exe')
     for path in files:
         if not path.is_file():
             raise ValueError(f'Missing native binary: {path}')

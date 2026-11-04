@@ -55,9 +55,10 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   interpreter when its hash is unknown. The initial missing-data check is
   not an integrity check. Release recovery for corrupted installed data
   remains open; changing framework behavior needs compiled tests.
-- The experimental server stores account passwords in plaintext in
-  `accounts.json`, and its protocol implementation is incomplete. Do not
-  present it as a production-ready server. It is not included in game packages.
+- The experimental server (`mpo-server`, shipped beside PO+) stores account
+  passwords in plaintext in `accounts.txt` (the login proof is keyed by the
+  plain password), and its protocol implementation is incomplete. Do not
+  present it as a production-ready server.
 - Root project license, public repository/download location, dependency
   source-distribution materials and Windows signing policy remain undecided.
 

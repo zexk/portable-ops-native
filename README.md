@@ -114,18 +114,21 @@ from a system-layer one.
 ## Online play
 
 Portable Ops+ plays on line through SaveMGO's community server by default.
-`server/` is a server of our own, written from the protocol
-(`server/PROTOCOL.md`) with Python's standard library alone:
+`mpo-server` is a server of our own, written from the protocol
+(`server/PROTOCOL.md`): one C file (`server/mpo_server.c`) with no
+dependencies, built with the game and shipped beside Portable Ops+ in its
+packages. Without CMake: `cc -O2 -o mpo-server server/mpo_server.c` (add
+`-lws2_32` on Windows).
 
 ```sh
-python3 server/mpo_server.py --data out/server-data adduser NAME PASSWORD PLAYER_NAME
-python3 server/mpo_server.py --data out/server-data --web-port 8080 \
+out/pop/bin/mpo-server --data out/server-data adduser NAME PASSWORD PLAYER_NAME
+out/pop/bin/mpo-server --data out/server-data --web-port 8080 \
     --game ~/.local/share/PortableOpsPlusNative/ULUS10290/EBOOT.ELF
 MGSPOP_ONLINE_SERVER=127.0.0.1:8080 out/pop/bin/PortableOpsPlusNative
 ```
 
 `--game` gives it the game's defaults for the one file the game insists on
-downloading. Each server chooses its own terms, news and banner (see the
-script's help). Logging in, the lobby and hosting a game work; other players
+downloading. Each server chooses its own terms, news and banner (see
+`mpo-server --help`). Logging in, the lobby and hosting a game work; other players
 finding and joining a game do not yet. `<PREFIX>_NET_CAPTURE=<file>` records a
 session's traffic, and `server/decode.py` reads it.

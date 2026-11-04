@@ -39,7 +39,7 @@ plus one.
 
 Some payloads are Blowfish-encrypted (ECB, each 8-byte block as two big-endian
 words; key: 56 bytes at EBOOT 0x16d998; 0x142b7c, mode 0 encrypts and 1
-decrypts). `server/blowfish.py` implements it.
+decrypts). `server/mpo_server.c` implements it.
 
 ## Gate (5731)
 

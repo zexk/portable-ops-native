@@ -22,4 +22,5 @@ archive records the minimum glibc version. The lowercase launcher also
 raises the stack limit on systems that need it.
 
 These are local builds. Online play remains incomplete: finding and joining
-other players' games is not yet working. See licenses/ for bundled software.
+other players' games is not yet working. Portable Ops+ includes
+mpo-server, an experimental server of its own (run it with --help). See licenses/ for bundled software.

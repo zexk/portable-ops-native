@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PortableOpsNative VERSION 0.1.0 LANGUAGES CXX)
+project(PortableOpsNative VERSION 0.1.0 LANGUAGES C CXX)
 
 # PortableKit brings the recompiler, the runtime and the system layer, and
 # defines portablekit_add_game(). It builds one game per configured tree, so
@@ -31,4 +31,12 @@ target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/common
 if(MGS_EDITION MATCHES "-(eu|jp)$")
     string(TOUPPER "${CMAKE_MATCH_1}" region)
     target_compile_definitions(${target} PRIVATE MGS_REGION_${region})
+endif()
+
+# The online server (server/): one C file with no dependencies, shipped beside
+# Portable Ops+.
+add_executable(mpo-server server/mpo_server.c)
+set_target_properties(mpo-server PROPERTIES C_STANDARD 99 RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(WIN32)
+    target_link_libraries(mpo-server PRIVATE ws2_32)
 endif()
