@@ -80,9 +80,11 @@ const GameProfile &game() {
         .view_aspect_frame = &mgs::view_aspect_frame,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
-        // North American console: English, cross confirms.
+        // North American console, English. The game confirms with circle
+        // whatever the console says, so report circle and keep the menu,
+        // the system dialogs and the default face button in step with it.
         .system_language = 1u,
-        .confirm_button = 1u,
+        .confirm_button = 0u,
     };
     return profile;
 }
