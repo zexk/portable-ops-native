@@ -23,7 +23,13 @@ ntdll ole32 oleaut32 powrprof propsys psapi rpcrt4 secur32 setupapi shell32 shlw
 ucrtbase user32 userenv usp10 version winhttp wininet winmm winspool wintrust
 ws2_32 wtsapi32 xinput1_4 vulkan-1""".split())
 
-TARGETS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative'}
+TARGETS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative', 'pop-eu': 'PortableOpsPlusNative',
+           'pop-jp': 'PortableOpsPlusNative'}
+# The staged program and the archive name the release; Portable Ops+'s
+# European and Japanese editions build the same program for their own disc.
+LABELS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative', 'pop-eu': 'PortableOpsPlusNative-EU',
+          'pop-jp': 'PortableOpsPlusNative-JP'}
+WINDOWS = os.name == 'nt'
 
 
 def cache_values(path):
@@ -50,7 +56,7 @@ def validate_build(build, edition, profile):
         raise ValueError(f'{profile}: no module corpus')
     files = [build / 'bin' / (TARGETS[edition] + '.exe')]
     files += [build / 'bin' / 'overlays' / (name + '.dll') for name in modules]
-    if edition == 'pop':
+    if edition.startswith('pop'):
         files.append(build / 'bin' / 'mpo-server.exe')
     for path in files:
         if not path.is_file():
@@ -80,7 +86,7 @@ def copy_dependencies(stage, binaries, objdump, search, system):
                 continue  # Windows API sets are supplied by the operating system.
             source = available.get(lower)
             if source is None:
-                if lower.removesuffix('.dll') in SYSTEM_DLLS and (system / name).is_file():
+                if lower.removesuffix('.dll') in SYSTEM_DLLS and (system is None or (system / name).is_file()):
                     continue
                 raise ValueError(f'{binary.name}: missing dependency {name}')
             target = stage / name
@@ -93,7 +99,7 @@ def package(args, edition):
     build = args.build_root.resolve() / edition
     profile = ROOT / 'profiles' / edition
     binaries = validate_build(build, edition, profile)
-    name = TARGETS[edition]
+    name = LABELS[edition]
     output = ROOT / 'out' / f'release-windows-{edition}'
     output.mkdir(parents=True, exist_ok=True)
     # Stage in a fresh directory. Failed checks cannot overwrite a previous ZIP.
@@ -105,11 +111,16 @@ def package(args, edition):
         copied = []
         for source in binaries:
             target = stage / ('overlays' if source.suffix == '.dll' else '') / source.name
+            if source.name == TARGETS[edition] + '.exe':
+                target = stage / (name + '.exe')
             shutil.copy2(source, target)
             copied.append(target)
-        copy_dependencies(stage, copied, args.toolchain / 'bin' / 'llvm-objdump.exe',
-                          [build / 'bin', build / 'bin' / 'lib', args.toolchain / 'bin'],
-                          Path(os.environ['SystemRoot']) / 'System32')
+        # Cross-built on Linux: the toolchain's own objdump, and the system
+        # DLLs taken from the list alone.
+        copy_dependencies(stage, copied, args.toolchain / 'bin' / ('llvm-objdump.exe' if WINDOWS else 'llvm-objdump'),
+                          [build / 'bin', build / 'bin' / 'lib', args.toolchain / 'bin',
+                           args.toolchain / 'x86_64-w64-mingw32' / 'bin'],
+                          Path(os.environ['SystemRoot']) / 'System32' if WINDOWS else None)
         for required in ('SDL3.dll', 'avcodec-61.dll', 'avutil-59.dll', 'swresample-5.dll'):
             if not (stage / required).is_file():
                 raise ValueError(f'Required runtime library was not bundled: {required}')
@@ -133,15 +144,20 @@ def package(args, edition):
             shutil.copy2(source, stage / 'licenses' / dest)
         shutil.copy2(ROOT / 'packaging/windows/README.txt', stage / 'README.txt')
         # --version exits before asset discovery. No installed data is touched.
-        env = dict(os.environ, PATH=str(stage) + os.pathsep + os.environ['SystemRoot'] + r'\System32')
-        version = subprocess.check_output([str(stage / (name + '.exe')), '--version'],
-                                          cwd=temporary, env=env, text=True, timeout=30).strip()
+        # Off Windows it runs under Wine.
+        if WINDOWS:
+            env = dict(os.environ, PATH=str(stage) + os.pathsep + os.environ['SystemRoot'] + r'\System32')
+            command = [str(stage / (name + '.exe')), '--version']
+        else:
+            env = dict(os.environ, WINEDEBUG='-all')
+            command = ['wine', str(stage / (name + '.exe')), '--version']
+        version = subprocess.check_output(command, cwd=temporary, env=env, text=True, timeout=120).strip()
         revision = subprocess.check_output(['git', '-C', str(ROOT), 'describe', '--always', '--dirty'], text=True).strip()
         (stage / 'BUILDINFO.txt').write_text(
             f'{name}\n{version}\nEdition: {edition}\nNative modules: {len(binaries) - 1}\n'
             f'Package label: {args.version}\nSource: {revision}\n', encoding='utf-8')
         (stage / 'RELEASE-MANIFEST.json').write_text(json.dumps(audit(ROOT, edition, stage), indent=2) + '\n', encoding='utf-8')
-        archive_name = f'{name}-{args.version}-windows-x64.zip'
+        archive_name = f'{LABELS[edition]}-{args.version}-windows-x64.zip'
         temporary_zip = Path(temporary) / archive_name
         with zipfile.ZipFile(temporary_zip, 'w', zipfile.ZIP_DEFLATED) as archive:
             for path in sorted(stage.rglob('*')):
@@ -162,7 +178,7 @@ def package(args, edition):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('edition', choices=['po', 'pop', 'both'], nargs='?', default='both')
+    parser.add_argument('edition', choices=[*TARGETS, 'all'], nargs='?', default='all')
     parser.add_argument('--build-root', type=Path, default=ROOT / 'out/windows')
     parser.add_argument('--toolchain', type=Path, required=True, help='llvm-mingw x64 UCRT directory')
     parser.add_argument('--sdl-license', type=Path, required=True)
@@ -172,9 +188,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.version):
         parser.error('version must contain only letters, digits, dots, underscores and hyphens')
-    if os.name != 'nt':
-        parser.error('Run on Windows x64: packaging verifies the executable starts')
-    for edition in TARGETS if args.edition == 'both' else [args.edition]:
+    for edition in TARGETS if args.edition == 'all' else [args.edition]:
         package(args, edition)
 
 

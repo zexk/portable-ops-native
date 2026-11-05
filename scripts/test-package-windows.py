@@ -37,9 +37,12 @@ with tempfile.TemporaryDirectory() as temporary:
                     'command': 'clang++ -DPORTABLEKIT_HAS_RENDERER=1 -DPORTABLEKIT_HAS_FFMPEG=1'}]
         (build / 'compile_commands.json').write_text(json.dumps(command))
         (build / 'bin' / (target + '.exe')).touch()
+        server = edition.startswith('pop')
+        if server:
+            (build / 'bin/mpo-server.exe').touch()
         module = build / 'bin/overlays/module.dll'
         module.touch()
-        assert len(packager.validate_build(build, edition, profile)) == 2
+        assert len(packager.validate_build(build, edition, profile)) == 2 + server
         module.unlink()
         rejects(lambda: packager.validate_build(build, edition, profile), 'Missing native binary')
         module.touch()
@@ -74,4 +77,4 @@ with tempfile.TemporaryDirectory() as temporary:
     with patch.object(packager.subprocess, 'check_output',
                       return_value='file format coff-x86-64\n DLL Name: SDL3.dll\n'):
         assert packager.imports('objdump', program) == ['SDL3.dll']
-print('Windows package checks passed: both editions, missing modules, release flags, DLL closure and x64 format')
+print('Windows package checks passed: all editions, missing modules, release flags, DLL closure and x64 format')

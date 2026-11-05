@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 import subprocess
 
-TARGETS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative'}
+# The staged program's name: the European and Japanese editions of Portable
+# Ops+ carry their region.
+TARGETS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative', 'pop-eu': 'PortableOpsPlusNative-EU',
+           'pop-jp': 'PortableOpsPlusNative-JP'}
 
 
 def sha256(path):
