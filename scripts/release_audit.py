@@ -77,8 +77,10 @@ def revision(root):
 
 def audit(root, edition, stage):
     profile = root / 'profiles' / edition
-    suffix = '.dll' if (stage / (TARGETS[edition] + '.exe')).is_file() else '.so'
-    program = stage / (TARGETS[edition] + ('.exe' if suffix == '.dll' else ''))
+    # Windows keeps the built program's name; Linux names it after the release.
+    exe = stage / (('PortableOpsNative' if edition == 'po' else 'PortableOpsPlusNative') + '.exe')
+    suffix = '.dll' if exe.is_file() else '.so'
+    program = exe if suffix == '.dll' else stage / TARGETS[edition]
     if not program.is_file():
         raise ValueError('Missing game executable')
     modules = check_modules(profile, stage, suffix)

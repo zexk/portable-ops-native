@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Only OS/graphics-driver components may be resolved from System32. Builder-installed runtimes
 # (VC++, OpenSSL, etc.) must not accidentally become player prerequisites.
 SYSTEM_DLLS = set("""advapi32 avrt bcrypt cfgmgr32 combase comctl32 comdlg32 crypt32
-cryptbase d3d11 d3d12 d3dcompiler_47 dbghelp dinput8 dwmapi dxgi dxguid gdi32 hid
+cryptbase d2d1 d3d11 d3d12 d3dcompiler_47 dbghelp dinput8 dwmapi dwrite dxgi dxguid gdi32 hid
 imm32 iphlpapi kernel32 kernelbase mf mfplat mfreadwrite mfuuid mpr msvcrt ncrypt
 ntdll ole32 oleaut32 powrprof propsys psapi rpcrt4 secur32 setupapi shell32 shlwapi
 ucrtbase user32 userenv usp10 version winhttp wininet winmm winspool wintrust
@@ -25,7 +25,7 @@ ws2_32 wtsapi32 xinput1_4 vulkan-1""".split())
 
 TARGETS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative', 'pop-eu': 'PortableOpsPlusNative',
            'pop-jp': 'PortableOpsPlusNative'}
-# The staged program and the archive name the release; Portable Ops+'s
+# The staged folder and the archive name the release; Portable Ops+'s
 # European and Japanese editions build the same program for their own disc.
 LABELS = {'po': 'PortableOpsNative', 'pop': 'PortableOpsPlusNative', 'pop-eu': 'PortableOpsPlusNative-EU',
           'pop-jp': 'PortableOpsPlusNative-JP'}
@@ -33,7 +33,7 @@ WINDOWS = os.name == 'nt'
 
 
 def cache_values(path):
-    return dict(re.findall(r'^([^/#][^:=]*):[^=]+=(.*)$', path.read_text(), re.M))
+    return dict(re.findall(r'^([^/#\n][^:=\n]*):[^=\n]+=(.*)$', path.read_text(), re.M))
 
 
 def validate_build(build, edition, profile):
@@ -110,9 +110,8 @@ def package(args, edition):
         (stage / 'licenses').mkdir()
         copied = []
         for source in binaries:
+            # Regional releases change the folder/archive label, not the program name.
             target = stage / ('overlays' if source.suffix == '.dll' else '') / source.name
-            if source.name == TARGETS[edition] + '.exe':
-                target = stage / (name + '.exe')
             shutil.copy2(source, target)
             copied.append(target)
         # Cross-built on Linux: the toolchain's own objdump, and the system
@@ -140,7 +139,7 @@ def package(args, edition):
         }
         mingw = args.toolchain / 'x86_64-w64-mingw32/share/mingw32'
         for source in mingw.glob('COPYING*'):
-            licenses['mingw-w64-' + source.name + '.txt'] = source
+            licenses['mingw-w64-' + source.name.removesuffix('.txt') + '.txt'] = source
         for dest, source in licenses.items():
             shutil.copy2(source, stage / 'licenses' / dest)
         shutil.copy2(ROOT / 'packaging/windows/README.txt', stage / 'README.txt')
@@ -148,14 +147,14 @@ def package(args, edition):
         # Off Windows it runs under Wine.
         if WINDOWS:
             env = dict(os.environ, PATH=str(stage) + os.pathsep + os.environ['SystemRoot'] + r'\System32')
-            command = [str(stage / (name + '.exe')), '--version']
+            command = [str(stage / (TARGETS[edition] + '.exe')), '--version']
         else:
             env = dict(os.environ, WINEDEBUG='-all')
-            command = ['wine', str(stage / (name + '.exe')), '--version']
+            command = ['wine', str(stage / (TARGETS[edition] + '.exe')), '--version']
         version = subprocess.check_output(command, cwd=temporary, env=env, text=True, timeout=120).strip()
         revision = subprocess.check_output(['git', '-C', str(ROOT), 'describe', '--always', '--dirty'], text=True).strip()
         (stage / 'BUILDINFO.txt').write_text(
-            f'{name}\n{version}\nEdition: {edition}\nNative modules: {len(binaries) - 1}\n'
+            f'{name}\n{version}\nEdition: {edition}\nNative modules: {sum(b.suffix == ".dll" for b in binaries)}\n'
             f'Package label: {args.version}\nSource: {revision}\n', encoding='utf-8')
         (stage / 'RELEASE-MANIFEST.json').write_text(json.dumps(audit(ROOT, edition, stage), indent=2) + '\n', encoding='utf-8')
         archive_name = f'{LABELS[edition]}-{args.version}-windows-x64.zip'

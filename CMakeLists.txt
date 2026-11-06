@@ -11,6 +11,9 @@ set(MGS_EDITION "po" CACHE STRING "Edition to build: po (Portable Ops), pop, pop
 set_property(CACHE MGS_EDITION PROPERTY STRINGS po pop pop-eu pop-jp)
 
 add_subdirectory(portablekit)
+# PortableKit's own setting stays in its directory; the packagers read the
+# game's compile commands too.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(MGS_EDITION STREQUAL "po")
     set(target PortableOpsNative)
