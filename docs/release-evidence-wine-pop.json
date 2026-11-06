@@ -1,0 +1,33 @@
+{
+  "status": "DEVELOPMENT_SMOKE_CONFIRMED",
+  "artifact": null,
+  "sha256": null,
+  "executable_sha256": "5d281e4784e7fd24c187617ce8c466be1e8992981b557210d258caffb830d772",
+  "edition": "pop",
+  "source_commit": "d86cf7f",
+  "portablekit_commit": "b43cc2b",
+  "source_dirty": true,
+  "portablekit_dirty": true,
+  "tested_at": "2026-11-06",
+  "os": "Linux host, Wine 11.0, Windows x64 executable",
+  "toolchain": "llvm-mingw 20260922 UCRT x86-64; Clang 23.1.2",
+  "gpu": "AMD Radeon RX 9060 XT (RADV GFX1200)",
+  "checks": {
+    "windows_build": "PASS",
+    "module_identity_and_dll_closure": "PASS (153 overlay DLLs)",
+    "wine_startup": "PASS",
+    "basic_gameplay": "OWNER_CONFIRMED",
+    "clean_machine_launch": "NOT_TESTED",
+    "first_run_and_recovery": "NOT_TESTED",
+    "save_round_trip_and_upgrade": "NOT_TESTED",
+    "gameplay_completion": "NOT_TESTED",
+    "controls_audio_rendering": "NOT_FULLY_TESTED",
+    "performance_and_long_session": "NOT_TESTED",
+    "advertised_multiplayer": "NOT_TESTED"
+  },
+  "notes": [
+    "Development build with copied existing installation and saves, not a packaged candidate.",
+    "No native Windows acceptance claimed. Source revisions were dirty at build time.",
+    "User controlled gameplay; agent did not send game input."
+  ]
+}

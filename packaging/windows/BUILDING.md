@@ -1,8 +1,9 @@
 # Windows release preparation
 
 These commands are for the maintainer. Players receive one ZIP per edition
-and supply an ISO through the existing first-run setup. Nothing below has
-been built or launch-tested on Windows yet.
+and supply an ISO through the existing first-run setup. The PO+ development
+build has passed a Wine gameplay smoke check; native Windows and packaged
+candidate acceptance remain pending. See `docs/RELEASE.md`.
 
 Use a Windows x64 machine with Python 3.11+, CMake, Ninja, Git, the Vulkan SDK
 (including glslangValidator), llvm-mingw **20260922 UCRT x86_64**, and the
@@ -49,14 +50,18 @@ existing verified Linux release dependency download can be reused. Put them
 in `out/windows-resources/` as `NotoSansCJKjp-Regular.otf` and
 `NotoSansCJK-LICENSE.txt`. Release builds do not automatically fetch the font.
 
-Package only after both builds finish:
+Package each chosen edition after its build finishes (use `po` or `pop`;
+`all` also includes the European and Japanese PO+ builds):
 
 ```powershell
-python scripts/package-windows.py both `
-    --toolchain "$toolchain" --sdl-license "$sdl/LICENSE.txt" `
-    --font out/windows-resources/NotoSansCJKjp-Regular.otf `
-    --font-license out/windows-resources/NotoSansCJK-LICENSE.txt `
-    --version 0.1.0-local
+foreach ($edition in @('po', 'pop')) {
+    python scripts/package-windows.py $edition `
+        --toolchain "$toolchain" --sdl-license "$sdl/LICENSE.txt" `
+        --font out/windows-resources/NotoSansCJKjp-Regular.otf `
+        --font-license out/windows-resources/NotoSansCJK-LICENSE.txt `
+        --version 0.1.0-rc1
+    if ($LASTEXITCODE -ne 0) { throw "Packaging failed: $edition" }
+}
 ```
 
 Use `po` or `pop` to package one edition. The script never builds anything.

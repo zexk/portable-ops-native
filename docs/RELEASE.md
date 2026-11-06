@@ -1,8 +1,8 @@
 # First-release gate
 
-Status: preparation only. No release builds or gameplay runs are authorized
-by the current task. No artifact is ready to publish. Checkboxes below are
-acceptance requirements, not claims that a feature works.
+Status: preparing local `0.1.0-rc1` candidates. The owner selected North
+American PO and PO+ on Linux x86-64 and Windows x64. No artifact is approved
+for publication. Checkboxes below distinguish evidence from remaining work.
 
 ## Candidate scope
 
@@ -16,6 +16,12 @@ owner decisions; this document does not silently choose an offline release.
 
 - Linux and Windows packaging entry points and player readmes.
 - Source-only packaging checks and a public CI workflow with no game data.
+- Build-size optimizations merged into the PortableKit fork, with the finished
+  optimization branch and worktree removed.
+- PO+ Windows development build, all 153 overlay DLLs and runtime dependency
+  closure checked; startup and basic gameplay confirmed under Wine 11.0.
+  See [development smoke evidence](release-evidence-wine-pop.json). This is
+  not clean-machine or packaged-candidate acceptance.
 - Portable Nix development environment, with the private workspace removed.
 - Windows DLL dependency closure with an explicit OS-library allowlist.
 - Exact module identity checks, rather than trusting module counts.
@@ -41,12 +47,9 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 
 ## Known source-review findings
 
-- Local development module directories contain one extra KCEJ_FS binary per
-  edition, compared with restored sources. PO: `mod08B61500_KCEJ_FS_165FFB12D002A786`;
-  PO+: `mod08AFED00_KCEJ_FS_B9E5210B94CF41F7`. Restored source lists contain 94
-  and 130 modules. These extras are not proven necessary or obsolete; fresh
-  builds plus gameplay coverage must settle that. Exact-set audit rejects
-  accidentally shipping stale extras.
+- Current source manifests contain 94 PO and 153 PO+ overlay identities.
+  Candidate builds must reproduce these exact sets; counts alone are not
+  sufficient, and previous development directories can contain stale modules.
 - Recent smoke logs contain short interpreted stage startup sequences before
   recompiled code takes over. Do not claim zero interpretation.
 - Those logs report three unresolved imports in one PO stage and one in one
@@ -64,19 +67,24 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 
 ## Before starting candidate builds
 
-- [ ] Owner approves scope, including online play and supported regions.
+- [x] Owner selects North American PO and PO+ on Linux and Windows.
+- [ ] Owner finalizes advertised online functionality.
 - [ ] Owner chooses the license for original code and approves distribution materials.
-- [ ] Review and commit intended game changes; remove or retain debug tracing deliberately.
+- [x] Review and commit packaging fixes and the early `--version` path.
+  Temporary, uncommitted PO model/camera tracing stays outside candidate source.
 - [x] Commit framework packaging changes locally and pin their exact submodule revision.
-  These commits are not published; public source availability remains a release gate.
+  Framework commits are pushed to the owner's PortableKit fork. The port has
+  no remote configured; its public source location remains undecided.
 - [ ] Archive private generation inputs and record executable/corpus hashes.
-- [ ] Confirm disk headroom for build objects, cache, staging and archive extraction.
+- [x] Check initial disk headroom: about 49 GiB available before candidate
+  snapshots/builds. Recheck before each matrix build.
 - [ ] Review SDL, FFmpeg, font and toolchain pins against their notices.
 - [ ] Choose version, public repository, downloads and support destination.
 
-## Candidate build checks (not yet run)
+## Candidate build checks
 
-- [ ] Build Windows first to expose untested host/overlay linking and DLL loading.
+- [x] Build and run the PO+ Windows development target under Wine, including
+  loaded native modules. Fresh candidate builds still require separate checks.
 - [ ] Build all four matrix entries from fresh dedicated directories.
 - [ ] Run framework tests against freshly built code.
 - [ ] Package with exact module audit, dependency closure, architecture checks and manifests.
