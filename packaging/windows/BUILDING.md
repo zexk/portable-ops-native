@@ -8,7 +8,11 @@ Use a Windows x64 machine with Python 3.11+, CMake, Ninja, Git, the Vulkan SDK
 (including glslangValidator), llvm-mingw **20260922 UCRT x86_64**, and the
 **SDL3 3.4.16 MinGW development package**. Use the same llvm-mingw toolchain
 for the executable and every overlay DLL. The framework downloads its pinned
-FFmpeg 7.1.5 LGPL Windows DLLs during configuration.
+FFmpeg 7.1.5 LGPL Windows DLLs during native Windows configuration. Unix-to-MinGW
+x64 builds instead compile the minimal ATRAC3/ATRAC3plus/H.264 libraries from
+source. Set `PORTABLEKIT_FFMPEG_WINDOWS_PREBUILT=ON` to use the full prebuilt
+fallback there. The packager follows imports: swresample is included only when
+another DLL needs it.
 
 Copy this checkout including its local PortableKit changes and the generated
 `profiles/{po,pop}/{generated,overlays,units}` directories. Git alone does not
@@ -65,8 +69,8 @@ ZIP integrity, then writes ZIPs and SHA-256 sidecars under
 `out/release-windows-{po,pop}/dist/`. A failed check leaves previous ZIPs intact.
 No compiler, headers, `psp_recomp`, source corpus, disc image or save is packed.
 
-The separate Windows notices name the bundled FFmpeg LGPL-3.0 build; do not
-replace them with the Linux notices. `FFmpeg-SOURCE.txt` from the build is
+The Windows notices cover both minimal source builds (LGPL-2.1-or-later) and
+the prebuilt fallback (LGPL-3.0-or-later). `FFmpeg-SOURCE.txt` from the build is
 included. Before any public distribution, arrange corresponding source for
 that exact FFmpeg build and runtime libraries as their licenses require.
 This workflow prepares local packages only.

@@ -121,7 +121,8 @@ def package(args, edition):
                           [build / 'bin', build / 'bin' / 'lib', args.toolchain / 'bin',
                            args.toolchain / 'x86_64-w64-mingw32' / 'bin'],
                           Path(os.environ['SystemRoot']) / 'System32' if WINDOWS else None)
-        for required in ('SDL3.dll', 'avcodec-61.dll', 'avutil-59.dll', 'swresample-5.dll'):
+        # Full FFmpeg also imports swresample; copy_dependencies checks it recursively.
+        for required in ('SDL3.dll', 'avcodec-61.dll', 'avutil-59.dll'):
             if not (stage / required).is_file():
                 raise ValueError(f'Required runtime library was not bundled: {required}')
         shutil.copy2(args.font, stage / 'fonts' / 'NotoSansCJKjp-Regular.otf')

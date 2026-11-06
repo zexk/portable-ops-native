@@ -65,6 +65,21 @@ with tempfile.TemporaryDirectory() as temporary:
     with patch.object(packager, 'imports', side_effect=lambda _, path: dependencies[path.name]):
         packager.copy_dependencies(stage, [program], None, [libraries], system)
     assert {p.name for p in stage.iterdir()} == {'Game.exe', 'SDL3.dll', 'libc++.dll'}
+    # Minimal FFmpeg needs two DLLs; the full build also requires swresample.
+    for name in ('avcodec-61.dll', 'avutil-59.dll'):
+        (libraries / name).touch()
+    dependencies.update({'Game.exe': ['avcodec-61.dll'],
+                         'avcodec-61.dll': ['avutil-59.dll'], 'avutil-59.dll': []})
+    with patch.object(packager, 'imports', side_effect=lambda _, path: dependencies[path.name]):
+        packager.copy_dependencies(stage, [program], None, [libraries], system)
+        assert not (stage / 'swresample-5.dll').exists()
+        dependencies['avcodec-61.dll'].append('swresample-5.dll')
+        rejects(lambda: packager.copy_dependencies(stage, [program], None, [libraries], system),
+                'missing dependency swresample-5.dll')
+        (libraries / 'swresample-5.dll').touch()
+        dependencies['swresample-5.dll'] = []
+        packager.copy_dependencies(stage, [program], None, [libraries], system)
+        assert (stage / 'swresample-5.dll').is_file()
     with patch.object(packager, 'imports', return_value=['missing.dll']):
         rejects(lambda: packager.copy_dependencies(stage, [program], None, [libraries], system),
                 'missing dependency missing.dll')
