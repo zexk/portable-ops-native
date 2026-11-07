@@ -54,8 +54,9 @@ Windows x64 preparation covers both editions. Follow
 [the Windows build and packaging recipe](packaging/windows/BUILDING.md).
 `scripts/package-windows.py` packages existing release builds into portable
 ZIPs with runtime DLLs and native modules; it never compiles anything or
-ships a compiler. The PO+ Windows development build runs under Wine. Native
-Windows, first-run setup and final archive acceptance remain pending.
+ships a compiler. Both Windows candidate archives passed gameplay smoke
+tests under Wine. PO+ also passed first-run ISO import and save reload there.
+Native Windows and full archive acceptance remain pending.
 
 ## Build
 

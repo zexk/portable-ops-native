@@ -13,8 +13,10 @@
 - Reduced generated-code size and generation cost, and removed unnecessary
   host exports and framework-test builds in ports.
 - Added minimal Windows FFmpeg cross-builds and independent module linking.
-- Confirmed a PO+ Windows development build under Wine; local candidates are
-  being prepared for North American PO and PO+ on Linux and Windows.
+- Confirmed gameplay smoke tests for all four local candidate archives:
+  PO and PO+ on Linux through `steam-run`, and Windows builds through Wine.
+- Confirmed PO+ Windows ISO copy/import, restart without setup and save
+  reload under Wine, using an initially empty test data directory.
 - Licensed original port code under MIT and included its license in packages.
 - Recorded candidate archive hashes, source/corpus fingerprints, dependency
   notices and loader checks separately from gameplay acceptance.

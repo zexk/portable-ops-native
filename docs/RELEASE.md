@@ -119,8 +119,9 @@ Windows candidates built and passed packaging checks on 2026-11-07 at port
 `9dd16fc` and PortableKit `5a522cc`: [PO evidence](release-evidence-po-windows-rc1.json)
 and [PO+ evidence](release-evidence-pop-windows-rc1.json). These record archive
 hashes, exact module counts, MIT license inclusion and the staged Wine
-`--version` check. PO+ also passed a user-driven packaged gameplay smoke,
-fresh ISO copy/import, restart without setup and save reload under Wine.
+`--version` check. Both passed user-driven packaged gameplay smoke tests
+under Wine. PO+ also passed fresh ISO copy/import, restart without setup
+and save reload.
 Both archives remain local; full gameplay and clean-machine acceptance
 remain pending, including native Windows testing.
 
@@ -128,9 +129,11 @@ remain pending, including native Windows testing.
 [Linux PO+ evidence](release-evidence-pop-linux-rc1.json) record verified
 archives with 94 and 153 modules, respectively. Both pass relocated
 `--version` checks in the pinned SDK. The four-candidate matrix completed
-on 2026-11-07 at 23:15 UTC. All remain local candidates without packaged
-gameplay acceptance. Each distribution directory includes checksums and
-the corresponding FFmpeg source archive; final publication review remains
+on 2026-11-07 at 23:15 UTC. Both Linux packages subsequently passed
+user-driven gameplay smoke tests through `steam-run` on NixOS. All four
+remain local candidates with full acceptance pending. Each distribution
+directory includes checksums and the corresponding FFmpeg source archive;
+final publication review remains
 pending.
 
 ## Per-artifact acceptance (repeat for all four)
@@ -138,6 +141,9 @@ pending.
 Record results in a copy of `release-evidence.json`, using the archive's actual
 SHA-256. Never mark another platform passed based on a developer build.
 
+- [x] Brief user-driven gameplay smoke for all four exact candidate archives:
+  Linux through `steam-run` and Windows through Wine, on one AMD GPU system.
+  This does not complete the broader checks below.
 - [ ] Clean machine without development tools: launch and first-run setup.
 - [ ] ISO validation: supported, wrong edition/version, truncated and modified images.
 - [ ] Setup cancellation, insufficient space, copy/in-place modes and recovery.

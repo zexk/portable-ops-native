@@ -40,9 +40,27 @@
     "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
   },
   "notes": [
-    "Local candidate, not published. All gameplay and clean-machine checks remain pending.",
+    "Local candidate, not published. Packaged gameplay smoke passed under Wine; full gameplay and clean-machine acceptance remain pending.",
     "Built in a fresh dedicated directory. Compilation began at d45129a; the license, packaging and documentation followup at 9dd16fc changed no compiled source, build configuration or corpus. The build resumed and regenerated the version header before packaging.",
     "See release-import-audit.md for six identified unimplemented imports; only wakeup cancellation was observed being called in the separate development smoke.",
     "Corresponding unmodified FFmpeg 7.1.5 source archive accompanies the ZIP."
-  ]
+  ],
+  "gameplay_smoke": {
+    "status": "PASS_USER_REPORTED",
+    "reported_at": "2026-11-07T23:45:04.341122+00:00",
+    "environment": "Wine 11.0 on Linux; AMD Radeon RX 9060 XT (RADV GFX1200); Vulkan 1.4.354; DualSense controller detected",
+    "user_report": "works",
+    "log_sha256": "95e9d2a424800e8e4097847b337908b5880d329a2633a28a70721f9ad8cccbc4",
+    "observations": [
+      "94 packaged overlay corpora discovered.",
+      "Multiple stage modules reached recompiled code.",
+      "Runtime stopped: window closed."
+    ],
+    "limits": [
+      "Brief smoke only; campaign completion not established.",
+      "Save/reload not separately confirmed.",
+      "Prepared data and copied saves; PO first-run ISO import not tested.",
+      "Native Windows remains untested."
+    ]
+  }
 }

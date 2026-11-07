@@ -75,3 +75,23 @@ build regenerates its version header before packaging.
 This adds build/package evidence, not native Windows, clean-machine,
 first-run GUI, gameplay-completion or multiplayer acceptance. Publication,
 signing and public CI execution remain unverified.
+
+## Packaged gameplay smoke: 2026-11-07 UTC / 2026-11-08 CET
+
+The owner drove all four extracted candidate packages and reported each
+working. Windows builds ran under Wine 11.0; Linux builds used `steam-run`
+on NixOS. The system used an AMD Radeon RX 9060 XT with RADV GFX1200,
+Vulkan 1.4.354 and a DualSense controller. Logs show packaged modules
+reaching recompiled code and all four runs ending with the window closed.
+Each artifact's evidence record includes its gameplay log hash. Packaged
+file hashes still match the manifests after testing.
+
+PO+ Windows also ran first-use setup with an empty isolated data directory.
+The copied ISO matches the selected original byte for byte; its extracted
+executable matches the frozen supported executable hash. The owner confirmed
+gameplay after import, restart without setup and saved progress loading.
+All test saves were separate copies or newly created test data.
+
+These are brief smoke results, not campaign or mode completion. Native
+Windows, clean machines, other GPUs, extended play, installer recovery and
+multiplayer remain untested. ISO setup was exercised only for PO+ under Wine.

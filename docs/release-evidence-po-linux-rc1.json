@@ -41,10 +41,28 @@
     "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
   },
   "notes": [
-    "Local candidate, not published. All gameplay and clean-machine checks remain pending.",
+    "Local candidate, not published. Packaged gameplay smoke passed on Linux through steam-run; full gameplay and clean-machine acceptance remain pending.",
     "Built in a fresh dedicated directory at 9dd16fc with frozen generated corpora and PortableKit 5a522cc.",
     "Extracted program was mounted read-only at a path containing spaces and run with --version inside the pinned SDK, with network disabled and no source checkout mounted. This checks loading and version output, not first-run setup or graphics.",
     "See release-import-audit.md for identified missing imports.",
     "Corresponding unmodified FFmpeg 7.1.5 source archive accompanies the tarball."
-  ]
+  ],
+  "gameplay_smoke": {
+    "status": "PASS_USER_REPORTED",
+    "reported_at": "2026-11-07T23:47:28.233203+00:00",
+    "environment": "NixOS through steam-run; AMD Radeon RX 9060 XT (RADV GFX1200); Vulkan 1.4.354; DualSense controller detected",
+    "user_report": "works",
+    "log_sha256": "bbe1e8f4201266b7c9aded2ef38cc5bc229a61448010a244d6ae87475a443169",
+    "observations": [
+      "94 packaged overlay corpora discovered.",
+      "Multiple stage modules reached recompiled code.",
+      "Runtime stopped: window closed."
+    ],
+    "limits": [
+      "Brief smoke only; campaign completion not established.",
+      "Save/reload not separately confirmed.",
+      "Prepared data and copied saves; Linux first-run ISO import not tested.",
+      "Clean-machine and other Linux distributions untested."
+    ]
+  }
 }
