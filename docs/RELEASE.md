@@ -169,3 +169,17 @@ SHA-256. Never mark another platform passed based on a developer build.
 - [ ] Test public download/extraction and keep the previous tested version available.
 
 No automatic publication or messages to external services are part of these scripts.
+
+## Source history rewrite
+
+Before publication, history was rewritten to remove a local filesystem path
+from early `flake.nix` and `flake.lock` revisions. Commit hashes changed;
+trees after the path fix did not. The `0.1.0-rc1` binaries, their
+`--version` output and the evidence files keep the pre-rewrite hashes.
+Matching commits have identical trees:
+
+| Recorded | Public | Tree |
+| --- | --- | --- |
+| `9dd16fc` | `5579c7e` | `0a31612` |
+| `d45129a` | `80156e0` | `38e8f74` |
+| `d86cf7f` | `b675077` | `65fa892` |
