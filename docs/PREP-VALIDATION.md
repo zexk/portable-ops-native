@@ -61,6 +61,16 @@ build regenerates its version header before packaging.
 - Windows packaging, release-audit and edition-selection regression checks
   pass after the MIT packaging change. Static module analysis identifies
   the [six import gaps](release-import-audit.md) without running game code.
+- Linux PO and PO+ archives pass module, dependency, architecture, path and
+  manifest checks. Both extracted programs print `9dd16fc` from a read-only
+  path containing spaces inside the pinned SDK, without a source checkout
+  mounted or network access. Exact artifacts are recorded in the
+  [PO evidence](release-evidence-po-linux-rc1.json) and
+  [PO+ evidence](release-evidence-pop-linux-rc1.json).
+- Both Linux archives contain license and font bytes matching the frozen
+  inputs. Their FFmpeg source notes identify the accompanying source archive.
+  The bundled PO+ server requires glibc 2.14, below the package floor of
+  2.29; this static check does not establish multiplayer acceptance.
 
 This adds build/package evidence, not native Windows, clean-machine,
 first-run GUI, gameplay-completion or multiplayer acceptance. Publication,

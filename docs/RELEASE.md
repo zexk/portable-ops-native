@@ -105,14 +105,14 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 
 - [x] Build and run the PO+ Windows development target under Wine, including
   loaded native modules. Fresh candidate builds still require separate checks.
-- [ ] Build all four matrix entries from fresh dedicated directories.
+- [x] Build all four matrix entries from fresh dedicated directories.
 - [x] Run framework tests against freshly built code: 22/22 pass in the pinned
   Linux SDK. SDL and minimal FFmpeg libraries also pass binary path scans;
   the FFmpeg synthetic decoder check passes there.
-- [ ] Package with exact module audit, dependency closure, architecture checks and manifests.
-- [ ] Inspect archive contents and extract elsewhere; verify manifest file hashes.
-- [ ] Scan shipped binaries/logs for build-machine paths and unintended private data.
-- [ ] Collect toolchain versions and exact source revisions in candidate evidence.
+- [x] Package with exact module audit, dependency closure, architecture checks and manifests.
+- [x] Inspect archive contents and extract elsewhere; verify manifest file hashes.
+- [x] Scan shipped binaries/logs for build-machine paths and unintended private data.
+- [x] Collect toolchain versions and exact source revisions in candidate evidence.
 - [ ] Prepare corresponding dependency sources and final notices for distribution.
 
 Windows candidates built and passed packaging checks on 2026-11-07 at port
@@ -122,10 +122,14 @@ hashes, exact module counts, MIT license inclusion and the staged Wine
 `--version` check. Both archives remain local; neither has passed packaged
 gameplay or clean-machine acceptance.
 
-[Linux PO evidence](release-evidence-po-linux-rc1.json) records its verified
-archive, 94 modules and relocated `--version` check in the pinned SDK. This
-also remains a local candidate without gameplay acceptance. Linux PO+ work
-remains in progress.
+[Linux PO evidence](release-evidence-po-linux-rc1.json) and
+[Linux PO+ evidence](release-evidence-pop-linux-rc1.json) record verified
+archives with 94 and 153 modules, respectively. Both pass relocated
+`--version` checks in the pinned SDK. The four-candidate matrix completed
+on 2026-11-07 at 23:15 UTC. All remain local candidates without packaged
+gameplay acceptance. Each distribution directory includes checksums and
+the corresponding FFmpeg source archive; final publication review remains
+pending.
 
 ## Per-artifact acceptance (repeat for all four)
 
