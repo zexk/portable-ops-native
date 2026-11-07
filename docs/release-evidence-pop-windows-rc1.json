@@ -1,0 +1,47 @@
+{
+  "status": "PACKAGE_VERIFIED_ACCEPTANCE_PENDING",
+  "artifact": "PortableOpsPlusNative-0.1.0-rc1-windows-x64.zip",
+  "sha256": "acab2924a25844a7a31d69c6e3a0195acfaeec7dd4dafe8a909645d0e997020c",
+  "edition": "pop",
+  "source_commit": "9dd16fc33b11927ca264d9a59f240c5d77600beb",
+  "portablekit_commit": "5a522cca2275985b7f3217b650c2cd302447ba1c",
+  "toolchain": "llvm-mingw 20260922 UCRT x86-64; Clang 23.1.2",
+  "tester": null,
+  "tested_at": null,
+  "os": "Windows x64 target; cross-built on Linux; version command checked with Wine 11.0",
+  "cpu": null,
+  "ram_gib": null,
+  "gpu": null,
+  "driver": null,
+  "checks": {
+    "clean_machine_launch": "NOT_TESTED",
+    "first_run_and_recovery": "NOT_TESTED",
+    "save_round_trip_and_upgrade": "NOT_TESTED",
+    "gameplay_completion": "NOT_TESTED",
+    "controls_audio_rendering": "NOT_TESTED",
+    "performance_and_long_session": "NOT_TESTED",
+    "advertised_multiplayer": "NOT_TESTED"
+  },
+  "issues": [],
+  "package_checks": {
+    "verified_at": "2026-11-07",
+    "source_dirty": false,
+    "portablekit_dirty": false,
+    "native_modules": 153,
+    "manifest_files": 179,
+    "corpus_sha256": "35f140be3ed8e0c4f29a3509dcfa7abee7061a1b5ec3de5e233ff2886eafb0ec",
+    "archive_bytes": 405842011,
+    "module_identity_and_dll_closure": "PASS",
+    "binary_architecture_and_path_scan": "PASS",
+    "archive_and_manifest_hashes": "PASS",
+    "project_mit_license": "PASS",
+    "wine_version_command": "PASS",
+    "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
+  },
+  "notes": [
+    "Local candidate, not published. All gameplay and clean-machine checks remain pending.",
+    "Built in a fresh dedicated directory. Compilation began at d45129a; the license, packaging and documentation followup at 9dd16fc changed no compiled source, build configuration or corpus. The build resumed and regenerated the version header before packaging.",
+    "See release-import-audit.md for six identified unimplemented imports; only wakeup cancellation was observed being called in the separate development smoke.",
+    "Corresponding unmodified FFmpeg 7.1.5 source archive accompanies the ZIP."
+  ]
+}

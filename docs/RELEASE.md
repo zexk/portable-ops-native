@@ -112,6 +112,13 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 - [ ] Collect toolchain versions and exact source revisions in candidate evidence.
 - [ ] Prepare corresponding dependency sources and final notices for distribution.
 
+Windows candidates built and passed packaging checks on 2026-11-07 at port
+`9dd16fc` and PortableKit `5a522cc`: [PO evidence](release-evidence-po-windows-rc1.json)
+and [PO+ evidence](release-evidence-pop-windows-rc1.json). These record archive
+hashes, exact module counts, MIT license inclusion and the staged Wine
+`--version` check. Both archives remain local; neither has passed packaged
+gameplay or clean-machine acceptance. Linux candidate work remains in progress.
+
 ## Per-artifact acceptance (repeat for all four)
 
 Record results in a copy of `release-evidence.json`, using the archive's actual
