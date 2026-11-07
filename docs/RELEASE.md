@@ -59,14 +59,11 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   sufficient, and previous development directories can contain stale modules.
 - Recent smoke logs contain short interpreted stage startup sequences before
   recompiled code takes over. Do not claim zero interpretation.
-- Older logs report three unresolved imports in one PO stage. The PO+ Wine
-  smoke reports one in a menu stage and four more in a later stage. It reaches
-  `ThreadManForUser::0xFCCFAD26` (`sceKernelCancelWakeupThread`, identified by
-  [PSPSDK's import table](https://github.com/pspdev/pspsdk/blob/master/src/user/ThreadManForUser.S)).
-  The current unresolved-import handler logs once and returns zero without
-  cancelling pending wakeups. This is an observed missing behavior, not proof
-  of a gameplay failure or of harmlessness. Identify the other NIDs and test
-  the effect of the reached stub before claiming complete compatibility.
+- The [import audit](release-import-audit.md) identifies six gaps across PO's
+  title, PO+'s title/briefing and PO+'s main executable. These explain the
+  stage-loader counts and include a reached `sceKernelCancelWakeupThread`
+  fallback. Effects on gameplay remain unverified; unresolved counts alone
+  do not measure compatibility.
 - `host/main.cpp` hashes an installed executable but falls back to the
   interpreter when its hash is unknown. The initial missing-data check is
   not an integrity check. Release recovery for corrupted installed data
@@ -93,8 +90,9 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 - [x] Freeze private executable and generated-corpus snapshots; record both
   executable hashes, both corpus hashes and the exact source revisions in the
   local candidate's `inputs.json`. Compilation began at port `d45129a` and
-  PortableKit `5a522cc`. The MIT packaging followup changes no compiled source
-  or build configuration; record its final revision before resuming the build.
+  PortableKit `5a522cc`. The MIT packaging followup at `9dd16fc` changes no
+  compiled source or build configuration; both revisions and unchanged corpus
+  fingerprints are recorded, and the build resumes at `9dd16fc`.
 - [x] Check initial disk headroom: about 49 GiB available before candidate
   snapshots/builds. Recheck before each matrix build.
 - [ ] Review SDL, FFmpeg, font and toolchain pins against their notices.
