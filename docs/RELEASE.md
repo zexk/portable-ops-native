@@ -9,8 +9,9 @@ for publication. Checkboxes below distinguish evidence from remaining work.
 The existing packaging matrix is North American PO 1.02 (ULUS10202) and
 PO+ 1.01 (ULUS10290), each on Linux x86-64 and Windows x64. EU/JP PO+,
 macOS, Android, ARM and explicit Steam Deck certification are outside this
-matrix. Multiplayer inclusion and the original project's license require
-owner decisions; this document does not silently choose an offline release.
+matrix. The owner selected MIT for original port code. Multiplayer inclusion
+still requires an owner decision; this document does not silently choose an
+offline release.
 
 ## Completed preparation
 
@@ -41,6 +42,12 @@ archive with:
 python3 scripts/release_audit.py --verify --stage /path/to/extracted/program-folder
 ```
 
+License, packaging and documentation changes may reuse candidate objects only
+after verifying that compiled sources, generated corpora, build configuration
+and the framework pin are unchanged. Record both revisions and rerun the build
+before packaging so the version header and linked executable match the final
+revision.
+
 This verifies recorded staged files and rejects extras in runtime directories;
 verify the outer archive checksum too. If the path scan rejects embedded compiler paths, use compiler
 file-prefix mappings and rebuild; do not disable the check for publication. Do not publish a dirty candidate.
@@ -68,14 +75,16 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   passwords in plaintext in `accounts.txt` (the login proof is keyed by the
   plain password), and its protocol implementation is incomplete. Do not
   present it as a production-ready server.
-- Root project license, public repository/download location, dependency
+- Public repository/download location, dependency
   source-distribution materials and Windows signing policy remain undecided.
 
 ## Before starting candidate builds
 
 - [x] Owner selects North American PO and PO+ on Linux and Windows.
 - [ ] Owner finalizes advertised online functionality.
-- [ ] Owner chooses the license for original code and approves distribution materials.
+- [x] Owner chooses MIT for original port code; project license is included in
+  Linux and Windows packaging. Game and third-party code retain separate terms.
+- [ ] Owner approves final distribution materials.
 - [x] Review and commit packaging fixes and the early `--version` path.
   Temporary, uncommitted PO model/camera tracing stays outside candidate source.
 - [x] Commit framework packaging changes locally and pin their exact submodule revision.
@@ -83,8 +92,9 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   no remote configured; its public source location remains undecided.
 - [x] Freeze private executable and generated-corpus snapshots; record both
   executable hashes, both corpus hashes and the exact source revisions in the
-  local candidate's `inputs.json`. The candidate uses port `d45129a` and
-  PortableKit `5a522cc`; later evidence-only documentation is separate.
+  local candidate's `inputs.json`. Compilation began at port `d45129a` and
+  PortableKit `5a522cc`. The MIT packaging followup changes no compiled source
+  or build configuration; record its final revision before resuming the build.
 - [x] Check initial disk headroom: about 49 GiB available before candidate
   snapshots/builds. Recheck before each matrix build.
 - [ ] Review SDL, FFmpeg, font and toolchain pins against their notices.

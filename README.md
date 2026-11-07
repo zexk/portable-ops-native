@@ -12,8 +12,12 @@ supported disc image. No release artifacts are approved yet. Maintainers
 generate and compile the native game code before packaging.
 
 See [player support](SUPPORT.md), [release gates](docs/RELEASE.md) and
-[unreleased changes](CHANGELOG.md). Public download location, original-code
-license, release version and multiplayer scope remain open decisions.
+[unreleased changes](CHANGELOG.md). Public download location, release version
+and multiplayer scope remain open decisions.
+
+Original port code uses the [MIT License](LICENSE). Game data and generated
+game code are not covered by this grant. Third-party components retain their
+own licenses; see [third-party notices](packaging/THIRD_PARTY_NOTICES.md).
 
 ## Local Linux packages
 
@@ -22,14 +26,16 @@ both main corpora and their module corpora (`profiles/<edition>/generated/`,
 `overlays/` and `units/`):
 
 ```sh
-nix develop --command scripts/package-linux.sh both
+for edition in po pop; do
+    nix develop --command scripts/package-linux.sh "$edition"
+done
 ```
 
 The build uses Docker or Podman and the pinned Steam Runtime SDK. The wrapper
 needs Python 3.11+ (provided by `nix develop`, or your host environment).
 Players need neither Nix nor a compiler. Builds are resumable. Use
-`po` or `pop` instead of `both` to build one edition, or add `--skip-build` to
-repack an already staged build. Archives, checksums, build information and
+`po` or `pop` to build one edition; `all` also includes EU/JP PO+. Add
+`--skip-build` to repack an already staged build. Archives, checksums, build information and
 FFmpeg source land in `out/release-linux-{po,pop}/dist/`. This builds thousands
 of units; the default is two compile jobs, with a 2 GiB compiler cache per
 edition. `scripts/test-package-config.sh` checks edition selection without

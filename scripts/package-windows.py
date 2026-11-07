@@ -126,6 +126,7 @@ def package(args, edition):
                 raise ValueError(f'Required runtime library was not bundled: {required}')
         shutil.copy2(args.font, stage / 'fonts' / 'NotoSansCJKjp-Regular.otf')
         licenses = {
+            f'{name}-LICENSE.txt': ROOT / 'LICENSE',
             'PortableKit-LICENSE.txt': ROOT / 'portablekit/LICENSE',
             'DearImGui-LICENSE.txt': ROOT / 'portablekit/third_party/imgui/LICENSE.txt',
             'tiny-AES-c-UNLICENSE.txt': ROOT / 'portablekit/third_party/tiny_aes/UNLICENSE',

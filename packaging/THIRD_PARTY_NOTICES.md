@@ -1,6 +1,9 @@
 # Third-party notices
 
-PortableKit: MIT License, `PortableKit-LICENSE.txt`. The project-specific code has no separate license declared in this checkout. These local packages include precompiled game code; players supply their own disc image.
+Original port code: MIT License, included as the program's `*-LICENSE.txt`.
+This grant does not cover game data, generated game code or third-party code.
+PortableKit: MIT License, `PortableKit-LICENSE.txt`. These local packages
+include precompiled game code; players supply their own disc image.
 
 ## Compiled into the program
 
