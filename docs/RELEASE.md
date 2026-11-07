@@ -120,7 +120,12 @@ Windows candidates built and passed packaging checks on 2026-11-07 at port
 and [PO+ evidence](release-evidence-pop-windows-rc1.json). These record archive
 hashes, exact module counts, MIT license inclusion and the staged Wine
 `--version` check. Both archives remain local; neither has passed packaged
-gameplay or clean-machine acceptance. Linux candidate work remains in progress.
+gameplay or clean-machine acceptance.
+
+[Linux PO evidence](release-evidence-po-linux-rc1.json) records its verified
+archive, 94 modules and relocated `--version` check in the pinned SDK. This
+also remains a local candidate without gameplay acceptance. Linux PO+ work
+remains in progress.
 
 ## Per-artifact acceptance (repeat for all four)
 

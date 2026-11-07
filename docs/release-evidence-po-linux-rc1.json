@@ -1,0 +1,50 @@
+{
+  "status": "PACKAGE_VERIFIED_ACCEPTANCE_PENDING",
+  "artifact": "portable-ops-native-0.1.0-rc1-linux-x86_64.tar.gz",
+  "sha256": "7ad5ebbd7652136ffa9b090f4cf67e29cfac85e4eaa2ea9bbc1b664e0a798938",
+  "edition": "po",
+  "source_commit": "9dd16fc33b11927ca264d9a59f240c5d77600beb",
+  "portablekit_commit": "5a522cca2275985b7f3217b650c2cd302447ba1c",
+  "toolchain": "Steam Runtime 3 sniper SDK; GCC 14.2.0; CMake 3.25.1",
+  "tester": null,
+  "tested_at": null,
+  "os": "Linux x86-64 target; package loader checked inside pinned SDK",
+  "cpu": null,
+  "ram_gib": null,
+  "gpu": null,
+  "driver": null,
+  "checks": {
+    "clean_machine_launch": "NOT_TESTED",
+    "first_run_and_recovery": "NOT_TESTED",
+    "save_round_trip_and_upgrade": "NOT_TESTED",
+    "gameplay_completion": "NOT_TESTED",
+    "controls_audio_rendering": "NOT_TESTED",
+    "performance_and_long_session": "NOT_TESTED",
+    "advertised_multiplayer": "NOT_TESTED"
+  },
+  "issues": [],
+  "package_checks": {
+    "verified_at": "2026-11-07",
+    "source_dirty": false,
+    "portablekit_dirty": false,
+    "native_modules": 94,
+    "manifest_files": 109,
+    "corpus_sha256": "5c708c00b1f460fe74ad85d973f650072716c4732a9275fbe9b23777500379c7",
+    "archive_bytes": 105070874,
+    "module_identity_and_library_resolution": "PASS",
+    "binary_architecture_and_path_scan": "PASS",
+    "archive_and_manifest_hashes": "PASS",
+    "project_mit_license": "PASS",
+    "relocated_version_command": "PASS: PortableOpsNative 9dd16fc",
+    "glibc_floor": "2.29",
+    "sdk_image": "registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014",
+    "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
+  },
+  "notes": [
+    "Local candidate, not published. All gameplay and clean-machine checks remain pending.",
+    "Built in a fresh dedicated directory at 9dd16fc with frozen generated corpora and PortableKit 5a522cc.",
+    "Extracted program was mounted read-only at a path containing spaces and run with --version inside the pinned SDK, with network disabled and no source checkout mounted. This checks loading and version output, not first-run setup or graphics.",
+    "See release-import-audit.md for identified missing imports.",
+    "Corresponding unmodified FFmpeg 7.1.5 source archive accompanies the tarball."
+  ]
+}
