@@ -1,7 +1,8 @@
 # Player support
 
-No public release is available from this checkout yet. Windows packaging
-and portable Linux packaging are prepared, but final packages are unverified.
+No public release is available from this checkout yet. Local Linux and Windows
+candidates are undergoing validation. Build/package checks and gameplay
+acceptance are recorded separately in the [release evidence](docs/RELEASE.md).
 
 ## Installation and data
 
@@ -42,13 +43,16 @@ Use the repository's bug-report template once its public location is announced.
 Include package version/checksum, edition, OS, GPU/driver, reproducible steps,
 and whether the failure happens with an existing or fresh installation.
 
-For startup diagnostics, run from a terminal and save standard output/error:
+Check the build revision with `--version`. For startup diagnostics, run from a
+terminal and save standard output/error:
 
 ```sh
+./PortableOpsNative --version
 ./PortableOpsNative > startup.log 2>&1
 ```
 
 ```powershell
+.\PortableOpsNative.exe --version
 .\PortableOpsNative.exe *> startup.log
 ```
 
