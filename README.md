@@ -6,14 +6,15 @@ Metal Gear Solid: Portable Ops (ULUS-10202, 1.02) and Portable Ops+ (ULUS-10290,
 [TeamGDB/PortableKit](https://github.com/TeamGDB/PortableKit) carrying the
 fixes these games need, on branch `mgs`). Vulkan and SDL3.
 
-No disc images or generated game code are tracked in this repository. Planned
-releases provide precompiled programs; players supply their own
-supported disc image. No release artifacts are approved yet. Maintainers
-generate and compile the native game code before packaging.
+No disc images or generated game code are tracked in this repository.
+[Releases](https://github.com/zexk/portable-ops-native/releases) provide
+precompiled programs; players supply their own supported disc image.
+Maintainers generate and compile the native game code before packaging.
 
-See [player support](SUPPORT.md), [release gates](docs/RELEASE.md) and
-[unreleased changes](CHANGELOG.md). Public download location, release version
-and multiplayer scope remain open decisions.
+`0.1.0-rc1` is a preliminary prerelease. Windows builds were tested under
+Wine only; multiplayer (`mpo-server`) is experimental. See
+[player support](SUPPORT.md), [release gates](docs/RELEASE.md) and the
+[changelog](CHANGELOG.md).
 
 Original port code uses the [MIT License](LICENSE). Game data and generated
 game code are not covered by this grant. Third-party components retain their

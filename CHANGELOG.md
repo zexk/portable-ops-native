@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (release preparation)
+## 0.1.0-rc1 (2026-11-08, prerelease)
 
 - Prepared Linux x86-64 and Windows x64 packaging for North American PO and PO+.
 - Reused first-run ISO setup; packages are intended to contain native game
@@ -25,8 +25,7 @@
   cancellation is confirmed reached in the existing Wine smoke; effects on
   gameplay remain unverified. See [import audit](docs/release-import-audit.md).
 
-No release archives are approved. Native Windows and clean-machine setup,
-full gameplay coverage and multiplayer acceptance remain pending. Hardware
-requirements, public downloads, final distribution materials and release
-version are not final. Original port code is MIT; game and third-party code
+Preliminary prerelease. Native Windows and clean-machine setup, full
+gameplay coverage and multiplayer acceptance remain pending. Hardware
+requirements are not final. Original port code is MIT; game and third-party code
 retain separate terms.
