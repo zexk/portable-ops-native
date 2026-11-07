@@ -15,8 +15,8 @@
   "driver": null,
   "checks": {
     "clean_machine_launch": "NOT_TESTED",
-    "first_run_and_recovery": "NOT_TESTED",
-    "save_round_trip_and_upgrade": "NOT_TESTED",
+    "first_run_and_recovery": "PARTIAL: supported ISO copy/import, game launch and restart skipping setup pass under Wine; recovery cases pending",
+    "save_round_trip_and_upgrade": "PARTIAL: user confirmed saved progress loads after restart under Wine; upgrade/rollback and multiple slots pending",
     "gameplay_completion": "NOT_TESTED",
     "controls_audio_rendering": "NOT_TESTED",
     "performance_and_long_session": "NOT_TESTED",
@@ -40,9 +40,56 @@
     "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
   },
   "notes": [
-    "Local candidate, not published. All gameplay and clean-machine checks remain pending.",
+    "Local candidate, not published. Packaged gameplay smoke passed under Wine; full gameplay and clean-machine acceptance remain pending.",
     "Built in a fresh dedicated directory. Compilation began at d45129a; the license, packaging and documentation followup at 9dd16fc changed no compiled source, build configuration or corpus. The build resumed and regenerated the version header before packaging.",
     "See release-import-audit.md for six identified unimplemented imports; only wakeup cancellation was observed being called in the separate development smoke.",
     "Corresponding unmodified FFmpeg 7.1.5 source archive accompanies the ZIP."
-  ]
+  ],
+  "gameplay_smoke": {
+    "status": "PASS_USER_REPORTED",
+    "reported_at": "2026-11-07T23:38:17.551323+00:00",
+    "environment": "Wine 11.0 on Linux; AMD Radeon RX 9060 XT (RADV GFX1200); Vulkan 1.4.354; DualSense controller detected",
+    "user_report": "works",
+    "log_sha256": "08d13c0c125407db8785ef78ff0997cef0da2dc3a203892358fcce54f3694157",
+    "observations": [
+      "153 packaged overlay corpora discovered.",
+      "Title, briefing and subsequent stage modules reached recompiled code.",
+      "Runtime stopped: window closed; process exit code 4."
+    ],
+    "limits": [
+      "Brief smoke only; full modes and campaign coverage not established.",
+      "Native Windows remains untested."
+    ]
+  },
+  "iso_import_smoke": {
+    "status": "PASS_USER_REPORTED_AND_FILES_VERIFIED",
+    "reported_at": "2026-11-07T23:42:08.768641+00:00",
+    "environment": "Windows RC1 under Wine 11.0; empty isolated data directory",
+    "user_report": "works",
+    "storage": "copy",
+    "iso_sha256": "c2747e43d6ee178acbb20987af2f84079bdb5a1d562ee474f680b0a43f546edc",
+    "executable_sha256": "61eaaaa771e5dabcca07b6df62137e39709caa62030f5cc8ddc809e333a6943b",
+    "log_sha256": "3fdc58a8cefbe95bf5466ea762cf5a350d66aa313c4be6f8be01708a9e0a5777",
+    "observations": [
+      "Copied ISO is a regular file and matches selected ISO byte for byte.",
+      "Extracted executable matches supported PO+ executable hash.",
+      "Game booted using newly imported executable and copied ISO.",
+      "Runtime stopped: window closed."
+    ],
+    "limits": [
+      "Wrong ISO, cancellation, insufficient space and recovery not tested.",
+      "Native Windows remains untested."
+    ]
+  },
+  "restart_and_save_smoke": {
+    "status": "PASS_USER_REPORTED",
+    "reported_at": "2026-11-07T23:43:24.268327+00:00",
+    "user_report": "confirmed",
+    "confirmed": [
+      "Restart skips setup.",
+      "Saved progress loads."
+    ],
+    "log_sha256": "d96eac31d20dcda8dcad347fa12e16030a93441957990420fbdc57df83efba6b",
+    "stop_reason": "window closed"
+  }
 }

@@ -119,8 +119,10 @@ Windows candidates built and passed packaging checks on 2026-11-07 at port
 `9dd16fc` and PortableKit `5a522cc`: [PO evidence](release-evidence-po-windows-rc1.json)
 and [PO+ evidence](release-evidence-pop-windows-rc1.json). These record archive
 hashes, exact module counts, MIT license inclusion and the staged Wine
-`--version` check. Both archives remain local; neither has passed packaged
-gameplay or clean-machine acceptance.
+`--version` check. PO+ also passed a user-driven packaged gameplay smoke,
+fresh ISO copy/import, restart without setup and save reload under Wine.
+Both archives remain local; full gameplay and clean-machine acceptance
+remain pending, including native Windows testing.
 
 [Linux PO evidence](release-evidence-po-linux-rc1.json) and
 [Linux PO+ evidence](release-evidence-pop-linux-rc1.json) record verified
