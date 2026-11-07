@@ -95,7 +95,10 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   fingerprints are recorded, and the build resumes at `9dd16fc`.
 - [x] Check initial disk headroom: about 49 GiB available before candidate
   snapshots/builds. Recheck before each matrix build.
-- [ ] Review SDL, FFmpeg, font and toolchain pins against their notices.
+- [x] Review SDL, FFmpeg, font and toolchain pins against their notices.
+  Header/resource versions, downloaded source/font hashes, shipped Windows
+  runtime hashes and all bundled Windows license files match the recorded
+  candidate inputs. See [preparation validation](PREP-VALIDATION.md).
 - [ ] Choose version, public repository, downloads and support destination.
 
 ## Candidate build checks

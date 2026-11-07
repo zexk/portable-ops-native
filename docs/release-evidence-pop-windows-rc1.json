@@ -35,6 +35,7 @@
     "binary_architecture_and_path_scan": "PASS",
     "archive_and_manifest_hashes": "PASS",
     "project_mit_license": "PASS",
+    "dependency_notices_and_versions": "PASS",
     "wine_version_command": "PASS",
     "ffmpeg_source_sha256": "de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f"
   },
