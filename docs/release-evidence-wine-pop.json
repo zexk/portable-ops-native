@@ -28,6 +28,8 @@
   "notes": [
     "Development build with copied existing installation and saves, not a packaged candidate.",
     "No native Windows acceptance claimed. Source revisions were dirty at build time.",
-    "User controlled gameplay; agent did not send game input."
+    "User controlled gameplay; agent did not send game input.",
+    "The log reports one unresolved import in a menu stage and four more in a later stage.",
+    "A logging stub was reached for ThreadManForUser::0xFCCFAD26 (sceKernelCancelWakeupThread), with a0=0x0000016C and ra=0x08B1AA64. It returns zero without cancelling wakeups; gameplay impact remains unverified."
   ]
 }

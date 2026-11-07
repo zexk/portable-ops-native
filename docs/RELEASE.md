@@ -52,8 +52,14 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   sufficient, and previous development directories can contain stale modules.
 - Recent smoke logs contain short interpreted stage startup sequences before
   recompiled code takes over. Do not claim zero interpretation.
-- Those logs report three unresolved imports in one PO stage and one in one
-  PO+ stage. Identify their NIDs and establish whether execution reaches them.
+- Older logs report three unresolved imports in one PO stage. The PO+ Wine
+  smoke reports one in a menu stage and four more in a later stage. It reaches
+  `ThreadManForUser::0xFCCFAD26` (`sceKernelCancelWakeupThread`, identified by
+  [PSPSDK's import table](https://github.com/pspdev/pspsdk/blob/master/src/user/ThreadManForUser.S)).
+  The current unresolved-import handler logs once and returns zero without
+  cancelling pending wakeups. This is an observed missing behavior, not proof
+  of a gameplay failure or of harmlessness. Identify the other NIDs and test
+  the effect of the reached stub before claiming complete compatibility.
 - `host/main.cpp` hashes an installed executable but falls back to the
   interpreter when its hash is unknown. The initial missing-data check is
   not an integrity check. Release recovery for corrupted installed data
@@ -75,7 +81,10 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 - [x] Commit framework packaging changes locally and pin their exact submodule revision.
   Framework commits are pushed to the owner's PortableKit fork. The port has
   no remote configured; its public source location remains undecided.
-- [ ] Archive private generation inputs and record executable/corpus hashes.
+- [x] Freeze private executable and generated-corpus snapshots; record both
+  executable hashes, both corpus hashes and the exact source revisions in the
+  local candidate's `inputs.json`. The candidate uses port `d45129a` and
+  PortableKit `5a522cc`; later evidence-only documentation is separate.
 - [x] Check initial disk headroom: about 49 GiB available before candidate
   snapshots/builds. Recheck before each matrix build.
 - [ ] Review SDL, FFmpeg, font and toolchain pins against their notices.
@@ -86,7 +95,9 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 - [x] Build and run the PO+ Windows development target under Wine, including
   loaded native modules. Fresh candidate builds still require separate checks.
 - [ ] Build all four matrix entries from fresh dedicated directories.
-- [ ] Run framework tests against freshly built code.
+- [x] Run framework tests against freshly built code: 22/22 pass in the pinned
+  Linux SDK. SDL and minimal FFmpeg libraries also pass binary path scans;
+  the FFmpeg synthetic decoder check passes there.
 - [ ] Package with exact module audit, dependency closure, architecture checks and manifests.
 - [ ] Inspect archive contents and extract elsewhere; verify manifest file hashes.
 - [ ] Scan shipped binaries/logs for build-machine paths and unintended private data.
