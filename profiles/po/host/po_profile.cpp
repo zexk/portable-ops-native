@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "camera.hpp"
+#include "fulton.hpp"
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
@@ -35,6 +36,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera(runtime, kCamera);
     mgs::install_camera_follow(runtime, kCameraSwing);
     mgs::install_widescreen(runtime, kWidescreen);
+    mgs::fulton::install(runtime);
 }
 
 } // namespace
@@ -76,6 +78,7 @@ const GameProfile &game() {
         .infrastructure_url = &mgs::savempo_url,
 
         .patch_loaded_image = &patch_image,
+        .module_code_ready = &mgs::fulton::module_ready,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,

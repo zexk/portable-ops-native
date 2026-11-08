@@ -113,6 +113,36 @@ it once for all the stages that share it. Import stubs inside a module's code
 (`KCEJ_FS` has three) are dumped beside it as a `.stubs` file and kept out of
 its compiled code.
 
+## Optional Fulton prototype (PO only)
+
+Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **L + R +
+Triangle** near an unconscious ordinary soldier to recover them without a
+truck. Release the chord before another attempt. Disabled unless explicitly
+enabled; PO+ and online play are excluded.
+
+This first mechanic prototype performs immediate recovery using PO's original
+soldier generation and pending-capture handling. It has no balloon, lift
+animation or PW asset dependency yet. Scripted prisoners, carried soldiers
+and unsupported scenario callbacks are excluded. Full pending buffers and
+rejected captures leave the soldier present. Original roster admission still
+runs later through the game's normal results and selection screens.
+
+The port locates capture helpers from unique stage-code signatures and checks
+them again before use. Logs begin with `[fulton]`; `soldier recovered` means
+a source-2 record for the selected soldier was appended before actor cleanup.
+Instant capture and permanent roster admission were tested on an ordinary PO
+soldier. Read-only memory checks matched the captured WHALE record (`0x410`)
+to active roster slot 18 after mission exit, with pending count cleared.
+Save/reload acceptance remains unverified.
+
+Selection and commit checks run without game data:
+
+```sh
+c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
+    scripts/test-fulton.cpp -o out/test-fulton
+out/test-fulton
+```
+
 ## Testing without a window
 
 `scripts/run-headless.sh po|pop [seconds] [VAR=value...]` runs under Xvfb with
