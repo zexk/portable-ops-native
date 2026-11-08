@@ -1,8 +1,11 @@
 # First-release gate
 
-Status: preparing local `0.1.0-rc1` candidates. The owner selected North
-American PO and PO+ on Linux x86-64 and Windows x64. No artifact is approved
-for publication. Checkboxes below distinguish evidence from remaining work.
+Status: `0.1.0-rc1` published 2026-11-08 as a GitHub prerelease: North
+American PO and PO+ on Linux x86-64 and Windows x64, unsigned, with
+checksums and the FFmpeg source. The owner released it with the tested scope
+stated; multiplayer is labelled experimental. Hardware requirements and the
+per-artifact acceptance below remain open. Checkboxes below distinguish
+evidence from remaining work.
 
 ## Candidate scope
 
@@ -78,10 +81,10 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 ## Before starting candidate builds
 
 - [x] Owner selects North American PO and PO+ on Linux and Windows.
-- [ ] Owner finalizes advertised online functionality.
+- [x] Owner finalizes advertised online functionality.
 - [x] Owner chooses MIT for original port code; project license is included in
   Linux and Windows packaging. Game and third-party code retain separate terms.
-- [ ] Owner approves final distribution materials.
+- [x] Owner approves final distribution materials.
 - [x] Review and commit packaging fixes and the early `--version` path.
   Temporary, uncommitted PO model/camera tracing stays outside candidate source.
 - [x] Commit framework packaging changes locally and pin their exact submodule revision.
@@ -99,7 +102,7 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
   Header/resource versions, downloaded source/font hashes, shipped Windows
   runtime hashes and all bundled Windows license files match the recorded
   candidate inputs. See [preparation validation](PREP-VALIDATION.md).
-- [ ] Choose version, public repository, downloads and support destination.
+- [x] Choose version, public repository, downloads and support destination.
 
 ## Candidate build checks
 
@@ -113,7 +116,7 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 - [x] Inspect archive contents and extract elsewhere; verify manifest file hashes.
 - [x] Scan shipped binaries/logs for build-machine paths and unintended private data.
 - [x] Collect toolchain versions and exact source revisions in candidate evidence.
-- [ ] Prepare corresponding dependency sources and final notices for distribution.
+- [x] Prepare corresponding dependency sources and final notices for distribution.
 
 Windows candidates built and passed packaging checks on 2026-11-07 at port
 `9dd16fc` and PortableKit `5a522cc`: [PO evidence](release-evidence-po-windows-rc1.json)
@@ -162,11 +165,11 @@ SHA-256. Never mark another platform passed based on a developer build.
 
 ## Publication
 
-- [ ] All promised features pass or owner explicitly changes release scope.
+- [x] All promised features pass or owner explicitly changes release scope.
 - [ ] Finalize `CHANGELOG.md`, requirements, known issues and download instructions.
-- [ ] Confirm license/notices/source materials and signing/unsigned-download policy.
-- [ ] Publish the exact tested archives, checksums and source revisions.
-- [ ] Test public download/extraction and keep the previous tested version available.
+- [x] Confirm license/notices/source materials and signing/unsigned-download policy.
+- [x] Publish the exact tested archives, checksums and source revisions.
+- [x] Test public download/extraction and keep the previous tested version available.
 
 No automatic publication or messages to external services are part of these scripts.
 
