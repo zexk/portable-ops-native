@@ -6,6 +6,9 @@ Metal Gear Solid: Portable Ops (ULUS-10202, 1.02) and Portable Ops+ (ULUS-10290,
 [TeamGDB/PortableKit](https://github.com/TeamGDB/PortableKit) carrying the
 fixes these games need, on branch `mgs`). Vulkan and SDL3.
 
+Unofficial fan project, not affiliated with or endorsed by Konami. Metal Gear
+and Metal Gear Solid are trademarks of Konami Digital Entertainment.
+
 No disc images or generated game code are tracked in this repository.
 [Releases](https://github.com/zexk/portable-ops-native/releases) provide
 precompiled programs; players supply their own supported disc image.
