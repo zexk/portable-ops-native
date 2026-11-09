@@ -33,9 +33,10 @@ struct Anchor {
     std::int16_t x, y;   // PSP pixel the layout shrinks towards
 };
 
-// lay_life_stmn, lay_radar, lay_itemwin, lay_wpnwin, lay_itemchange.
+// lay_life_stmn, lay_radar, lay_itemwin, lay_wpnwin, lay_itemchange (the
+// centred weapon/item wheel, which shrinks towards the middle).
 constexpr Anchor kAnchors[] = {
-    {0x81B2CEu, 0, 272}, {0xC14397u, 480, 0}, {0x247E79u, 0, 272}, {0x1DCA51u, 480, 272}, {0x27D75Cu, 480, 272},
+    {0x81B2CEu, 0, 272}, {0xC14397u, 480, 0}, {0x247E79u, 0, 272}, {0x1DCA51u, 480, 272}, {0x27D75Cu, 240, 136},
 };
 
 struct Layout {
