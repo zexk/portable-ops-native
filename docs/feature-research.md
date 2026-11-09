@@ -145,7 +145,8 @@ factory's name hash and set that layout's tuple, leaving through-mode
 vertices alone. Stage-built `lay_msg`, `lay_call`, `lay_codecfooter` and
 `lay_fulton` need the same treatment from stage code. See
 [engine-built layouts](../../docs/portable-ops/feature-hooks.md#engine-built-layouts).
-No scaling has been tried live.
+A live read in `st01` confirmed these HUD layouts at identity tuple and
+full-screen rect; no scaling has been tried live.
 
 ## 10. Rich presence
 
@@ -202,12 +203,12 @@ not a justified LOD override. Rigid parts also have separate clip results.
 No scalar distance-based LOD threshold has been verified in these paths.
 
 A separate distance LOD switch exists: per-actor squared thresholds from a
-64-entry table at `0x20D650`, filled only by GCL handler `0x15324`. No
-engine or stage reference to that handler was found, so the table appears
-to stay empty and actors draw their base models. See
+64-entry table at `0x20D650`, filled by GCL command `0xC8C4F3` (handler
+`0x15324`) in 68 story stages. A live read in `st01` found two records:
+`ene_def` and `ind_def` swap to `ene_lod`/`ind_lod` beyond 7000 units. A
+profile can raise those distances at registration `0x15210` to keep full
+soldier models further out. See
 [distance LOD table](../../docs/portable-ops/feature-hooks.md#distance-lod-table).
-If a live check confirms a zero count, LOD overrides have nothing to extend;
-draw distance then rests on the view near/far limits.
 
 ## 13. Achievements
 
