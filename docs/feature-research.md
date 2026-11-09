@@ -126,6 +126,17 @@ See [LA2 construction](../../docs/portable-ops/feature-hooks.md#la2-construction
 This provides a narrower engine-level research path than changing every
 through-mode vertex; it does not yet establish that all HUD elements use LA2.
 
+The consumer side is now traced to the layout's render command list. The
+rect at `+0xFC` sets GE scissor, viewport and an orthographic mapping, so
+layout units are PSP pixels clipped to that rect. The tuple at `+0x114` is
+`(tx, ty, angle, scale)`: translation in 1/16 pixel, `0x1000` per turn and
+8.8 scale. It is a per-layout affine applied by the engine before vertices
+reach the GPU path, rewritten only when its dirty flag is set. Scaling a
+known HUD layout about a screen anchor needs no vertex classification, but
+still moves that layout's backgrounds and text and is clipped by the rect.
+See [LA2 render commands](../../docs/portable-ops/feature-hooks.md#la2-render-commands).
+Which live layouts form the HUD remains unverified.
+
 ## 10. Rich presence
 
 Existing ad hoc diagnostics expose group, nickname and connection state:
