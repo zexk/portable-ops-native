@@ -18,8 +18,9 @@
 // context is locked (+0x284 bit 0), as it is in play. On later stages our
 // entry in the engine's list is pointed at the new copy and registered with
 // sound2 again (0x1C5BC0, as the handler does), so the list does not grow.
-// Not yet working: sound2 accepts the bank (0x1C5BC0 only validates it and
-// returns its id) but its play routine 0x08B12644 refuses sound 0x271.
+// Filing only validates the bank with sound2 (0x1C5BC0 returns its id); sound2
+// plays a bank once its entry in the SHDS bank table holds the data pointer,
+// set through 0x1C5B20 (bank id, data) as engine 0xD1A8 does on demand.
 // Playing: 0xE540(id, 0, 0, &position) is the engine's sound call; a position
 // makes it a 3D sound.
 
@@ -32,7 +33,7 @@
 
 namespace mgs::fulton_sound {
 constexpr std::uint32_t base = 0x08804000u;
-constexpr std::uint32_t kHandler = base + 0xc918u, kRegister = base + 0x1c5bc0u;
+constexpr std::uint32_t kHandler = base + 0xc918u, kRegister = base + 0x1c5bc0u, kActivate = base + 0x1c5b20u;
 constexpr std::uint32_t kAlloc = base + 0x3a478u, kPlay = base + 0xe540u;
 constexpr std::uint32_t kKey = 0x37000000u | 0x89cdf4u; // .sep, GV_StrCode("segrp_75_furuton")
 constexpr std::uint32_t kSound = 0x271u;
@@ -70,10 +71,19 @@ inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
                 return;
             }
             memory.copy_in(buffer, bank);
-            auto done = [next](auto &filed, std::uint32_t result) {
-                current = true;
-                std::cout << "[fulton] sound bank filed for this stage (" << result << ")" << std::endl;
-                next(filed);
+            // Filing only validates the bank with sound2. Playable takes its
+            // data pointer in sound2's bank entry: what engine 0xD1A8 does for
+            // a sound group the scenario asks for, through stub 0x1C5B20
+            // (sound2 0xE43865EC: bank id, data).
+            auto done = [&runtime, buffer, next](auto &filed, std::uint32_t result) {
+                if (const auto at = entry(runtime.memory()))
+                    runtime.memory().store32(at + 8u, runtime.memory().load32(at + 8u) | 1u); // active, as 0xD1A8 marks it
+                portablekit::hle_extension::call_guest(filed, kActivate, {0x31u, buffer, 0u},
+                    [result, next](auto &active, std::uint32_t) {
+                        current = true;
+                        std::cout << "[fulton] sound bank filed and active for this stage (" << result << ")" << std::endl;
+                        next(active);
+                    });
             };
             if (const auto at = entry(memory)) {
                 memory.store32(at, buffer);

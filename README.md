@@ -154,8 +154,8 @@ lift clips (`enedam` 101 then 103, converted by the metal-gear `mtar.py` into
 `fult_enemy.mtar`) and is captured on the last frame. Afterwards Snake gets
 back the engine's last own motion requests. Failed or interrupted attachment
 cancels capture and leaves the soldier present. The Fulton sound
-(`fulton.sep`, PW's `segrp_75_furuton` as PO bank `0x31`) is filed per stage
-but does not play yet.
+(`fulton.sep`, PW's `segrp_75_furuton` as PO bank `0x31`) is filed and
+activated per stage; its playback is not yet checked in game.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
 `fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
