@@ -146,7 +146,9 @@ vertices alone. Stage-built `lay_msg`, `lay_call`, `lay_codecfooter` and
 `lay_fulton` need the same treatment from stage code. See
 [engine-built layouts](../../docs/portable-ops/feature-hooks.md#engine-built-layouts).
 A live read in `st01` confirmed these HUD layouts at identity tuple and
-full-screen rect; no scaling has been tried live.
+full-screen rect. A live write of the tuple plus dirty flag scaled the radar
+and life gauges to 0.5 about their corners; the life layout's name text
+kept its size, so text nodes need separate handling.
 
 ## 10. Rich presence
 
@@ -207,7 +209,8 @@ A separate distance LOD switch exists: per-actor squared thresholds from a
 `0x15324`) in 68 story stages. A live read in `st01` found two records:
 `ene_def` and `ind_def` swap to `ene_lod`/`ind_lod` beyond 7000 units. A
 profile can raise those distances at registration `0x15210` to keep full
-soldier models further out. See
+soldier models further out; a live write of the per-actor threshold
+switched soldiers to their full models. See
 [distance LOD table](../../docs/portable-ops/feature-hooks.md#distance-lod-table).
 
 ## 13. Achievements
