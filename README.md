@@ -152,8 +152,9 @@ out/test-fulton
 ### Developer visual experiment
 
 `MGSPO_FULTON_VISUALS=1` adds PW PSP donors to prepared stages. Snake
-attaches the device with PO's own crouch-and-place clip (clip `0x25` of
-`sna_wp_claymore`); the harness (`fult_item_body`) and the balloon ride the
+attaches the device with the optional converted PW `snake_coop` clip 156
+(`fult_place.mtar`), falling back to PO's crouch-and-place clip (`0x25` of
+`sna_wp_claymore`) when absent. The harness (`fult_item_body`) and balloon ride the
 soldier's upper spine (bone 2; `MGSPO_FULTON_HARNESS_Y` and
 `MGSPO_FULTON_BALLOON_Y` set their heights above it); the soldier plays PW's
 lift clips (`enedam` 101 then 103, converted by the metal-gear `mtar.py` into
@@ -161,11 +162,29 @@ lift clips (`enedam` 101 then 103, converted by the metal-gear `mtar.py` into
 back the engine's last own motion requests. Failed or interrupted attachment
 cancels capture and leaves the soldier present. The Fulton sound
 (`fulton.sep`, PW's `segrp_75_furuton` as PO bank `0x31`) is filed and
-activated per stage; its playback is not yet checked in game.
+activated per stage. Optional `fulton-lift.sep` adds two common PW
+extraction effects, bank `0x32`, sounds `0x272` and `0x273`, at yank start
+and settle cursor 100. The metal-gear `tools/portable-ops/fulton_sfx.py`
+builds it from two decoded mono 44.1 kHz 16-bit WAV effects, with a normal
+ADPCM instrument (without its base note, pitch is five octaves off). PO's
+sound table types `0x272` as ATRAC3plus, which plays one effect at a time,
+so the host gives it `0x273`'s ADPCM entry; otherwise it takes the balloon's
+voice and neither plays. Banks lost in a stage reset are filed again, and a
+cleared sound2 bank entry is activated again before each play. PW
+attachment and recruitment completed in PO live checks; balloon and both
+effects play, also after a stage reset. Prone soldiers held at gunpoint
+(hold-up flag `0x40`, motion state `0x152`) are eligible, confirmed in game;
+a rejected nearby soldier's flags and behavior are logged on a chord press.
+Soldier facing is aligned with Snake during attachment and lift, not yet
+confirmed in game. PW's attach-clip foley, soldier yank cries and
+voice-family selection remain separate work.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
 `fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
-`segrp_75_furuton.sep`. The script converts the TXPs to PO's layout, renames
+`segrp_75_furuton.sep`, `fult_place.mtar` and `fulton-lift.sep`. The optional
+placement archive comes from metal-gear's `mtar.py`, `--clip 156` of PW's
+`snake_coop.mtar`; it loads through PO's resource handler once per stage,
+without increasing the fixed-size stage ZAR. The script converts the TXPs to PO's layout, renames
 textures the two packs share, puts the packs before the models, and
 renumbers the sound bank. Prepare selected stages from an extracted PO disc:
 

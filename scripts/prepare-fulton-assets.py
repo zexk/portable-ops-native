@@ -172,6 +172,13 @@ def main():
     models = ('fult_item_balloon', 'fult_item_body')  # balloon; harness and tie
     donors = {name: (args.assets / name).read_bytes() for name in (
         *(m + ext for m in models for ext in ('.mdp', '.txp')), 'fult_enemy.mtar')}
+    placement_bytes = None
+    placement = args.assets / 'fult_place.mtar'
+    if placement.exists():
+        data = placement.read_bytes()
+        if len(data) < 32 or struct.unpack_from('<3I', data) != (0x7261744d, 19, 1):
+            parser.error('fult_place.mtar must be PO-format snake_coop clip 156 (tools/portable-ops/mtar.py)')
+        placement_bytes = data
     for model in models:
         if donors[model + '.mdp'][:4] != b'MDP ':
             parser.error(f'{model} must be the PSP MDP donor')
@@ -202,11 +209,24 @@ def main():
     if struct.unpack_from('<3I', donors['fult_enemy.mtar']) != (0x7261744d, 19, 2):
         parser.error('fult_enemy.mtar must be PO-format (tools/portable-ops/mtar.py, enedam clips 101 103)')
     args.output.mkdir(parents=True, exist_ok=True)
+    if placement_bytes is not None:
+        # Loaded through PO's own resource handler once per stage; its ZAR
+        # need not grow to fit another motion archive.
+        (args.output / 'fult_place.mtar').write_bytes(placement_bytes)
+        print('fult_place.mtar: PW attachment as a standalone PO archive')
     # The Fulton sound bank is filed by the host from memory, not from a stage.
     sound = args.assets / 'segrp_75_furuton.sep'
     if sound.exists():
         (args.output / 'fulton.sep').write_bytes(renumber_bank(sound.read_bytes(), 0x31))
         print('fulton.sep: PW segrp_75_furuton as bank 0x31')
+    lift_sound = args.assets / 'fulton-lift.sep'
+    if lift_sound.exists():
+        data = lift_sound.read_bytes()
+        if len(data) < 0x80 or len(data) > 0x11000 or data[:4] != b'SP2\0' or data[-4:] != b'EP2\0' or \
+                struct.unpack_from('<3I', data, 4) != (len(data), 0x30, 0x70):
+            parser.error('fulton-lift.sep must be PO bank 0x32 with two cues (tools/portable-ops/fulton_sfx.py)')
+        (args.output / 'fulton-lift.sep').write_bytes(data)
+        print('fulton-lift.sep: two common extraction effects as bank 0x32')
     rows = []
     for folder in sorted(args.stages.iterdir()):
         if not folder.is_dir() or (args.stage and folder.name not in args.stage):
@@ -225,9 +245,9 @@ def main():
         rows.append(' '.join((hashlib.sha256(raw).hexdigest(), str(len(raw)),
                               raw[:64].hex(), hashlib.sha256(output).hexdigest(), filename)))
         print(f'{folder.name}: donors added, disc size unchanged ({len(output)} bytes)')
-    (args.output / 'index.txt').write_text('\n'.join(rows) + '\n')
     if not rows:
         parser.exit(1, 'no stages prepared\n')
+    (args.output / 'index.txt').write_text('\n'.join(rows) + '\n')
 
 
 if __name__ == '__main__':

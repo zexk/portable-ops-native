@@ -5,6 +5,19 @@
 #include <map>
 #include <vector>
 
+// Queue guest returns so motion hand-back is exercised across callbacks.
+struct GuestCall {
+    std::uint32_t function;
+    std::vector<std::uint32_t> arguments;
+    portablekit::hle_extension::GuestReturn returned;
+};
+std::vector<GuestCall> guest_calls;
+const char *portablekit::hle_extension::env(const char *) { return nullptr; }
+void portablekit::hle_extension::call_guest(AllegrexContext &, std::uint32_t function,
+                                           std::span<const std::uint32_t> arguments, GuestReturn returned) {
+    guest_calls.push_back({function, {arguments.begin(), arguments.end()}, std::move(returned)});
+}
+
 struct Memory {
     std::map<std::uint32_t, std::uint32_t> words;
     std::vector<char> ram;
@@ -22,7 +35,18 @@ struct Memory {
         return 0;
     }
     std::uint8_t load8(std::uint32_t at) const { return load32(at & ~3u) >> ((at & 3u) * 8u); }
+    std::uint16_t load16(std::uint32_t at) const { return load32(at & ~3u) >> ((at & 2u) * 8u); }
+    void store32(std::uint32_t at, std::uint32_t value) { words[at] = value; }
+    void store16(std::uint32_t at, std::uint16_t value) {
+        const auto shift = (at & 2u) * 8u;
+        store32(at & ~3u, (load32(at & ~3u) & ~(0xffffu << shift)) | std::uint32_t(value) << shift);
+    }
 };
+
+struct TestRuntime : psprecomp::CorpusRuntime {
+    TestRuntime() : CorpusRuntime(nullptr, nullptr) {}
+};
+unsigned resets = 0;
 
 int main(int argc, char **argv) {
     using namespace mgs::fulton;
@@ -34,12 +58,36 @@ int main(int argc, char **argv) {
     memory.words[work] = target.name;
     memory.words[work + 0x10] = component;
     memory.words[work + 0x1438] = 79;
+
+    mgs::fulton_visuals::state.enemy = work;
+    mgs::fulton_visuals::state.yaw = 0xf123;
+    memory.store32(work + 0x60, 0x1234abcd);
+    memory.store32(work + 0x68, 0x5678dcba);
+    mgs::fulton_visuals::face_player(memory);
+    mgs::fulton_visuals::face_player(memory); // Preserve original headings across ticks.
+    assert(memory.load32(work + 0x60) == 0xf123abcd);
+    assert(memory.load32(work + 0x68) == 0xf123dcba);
+    memory.store16(work + 0x6a, 0x4321); // Engine takes ownership back.
+    mgs::fulton_visuals::restore_facing(memory);
+    assert(memory.load32(work + 0x60) == 0x1234abcd);
+    assert(memory.load32(work + 0x68) == 0x4321dcba);
+    mgs::fulton_visuals::state = {};
     memory.words[work + 0x1850] = 23;
     memory.words[work + 0x1858] = 0x804;
     memory.words[component] = 0x1002;
     memory.words[component + 4] = target.name;
     memory.words[component + 0x24] = work;
     assert(eligible(memory, target));
+    memory.words[work + 0x1858] = 0x10000040;
+    memory.words[work + 0x3c0] = 0x01520152;
+    assert(eligible(memory, target)); // Captured prone hold-up state.
+    memory.words[work + 0x3c0] = 0x01510151;
+    assert(!eligible(memory, target)); // Hold-up flag alone cannot admit standing actors.
+    memory.words[work + 0x3c0] = 0x01520152;
+    memory.words[work + 0x1858] |= 8;
+    assert(!eligible(memory, target)); // Dead remains excluded, even with stale hold-up state.
+    memory.words[work + 0x3c0] = 0;
+    memory.words[work + 0x1858] = 0x804;
     for (auto bad : {0x800u, 0x884u, 0x805u}) {
         memory.words[work + 0x1858] = bad;
         assert(!eligible(memory, target)); // Awake, removed, dead.
@@ -89,6 +137,81 @@ int main(int argc, char **argv) {
     assert(!find(code, notify_shape)); // Ambiguous stage match must be rejected.
     code[0] ^= 1;
     assert(find(code, notify_shape) == 64);
+
+    // Finished lift can still be rejected. Restore engine requests and release
+    // an unused upper layer, while preserving archive words changed by engine.
+    mgs::fulton_visuals::Override motion;
+    constexpr std::uint32_t block = 0x09b40000u, channel = 0x09b50000u;
+    memory.words[block + 4] = channel;
+    memory.words[block] = 0x09900000u;
+    assert(motion.capture(memory, block));
+    motion.apply(memory, 0x09910000u, mgs::fulton_visuals::kLiftArchive);
+    memory.words[channel + 0xc8] = 0x123456u; // Engine now owns this word.
+    mgs::fulton_visuals::learned[block][0] = {0, 7, 0, 0x7ffff, 0};
+    psprecomp::AllegrexContext context{};
+    TestRuntime runtime;
+    mgs::fulton_visuals::original_reset = [](auto &, auto &) { ++resets; };
+    context.gpr[4] = block;
+    context.gpr[5] = 1;
+    context.gpr[31] = 0x08810000u;
+    mgs::fulton_visuals::learned[block][1] = {1, 0x25, 0, 0x1ffe, 0};
+    mgs::fulton_visuals::motion_reset(runtime, context);
+    assert(resets == 1 && !mgs::fulton_visuals::learned[block][1]);
+    // A release during the override is remembered but must not interrupt it.
+    mgs::fulton_visuals::state.snake = motion;
+    mgs::fulton_visuals::learned[block][1] = {1, 0x25, 0, 0x1ffe, 0};
+    mgs::fulton_visuals::motion_reset(runtime, context);
+    assert(resets == 1 && context.pc == context.gpr[31]);
+    assert(!mgs::fulton_visuals::learned[block][1]);
+    mgs::fulton_visuals::state = {};
+    bool returned = false;
+    auto lifetime = std::make_shared<int>(0);
+    mgs::fulton_visuals::hand_back(memory, context, motion, [&, lifetime](auto &) { returned = true; });
+    for (unsigned i = 0; i < 2; ++i) {
+        assert(guest_calls.size() == 1 && !returned);
+        auto call = std::move(guest_calls.back());
+        guest_calls.clear();
+        assert(call.function == engine + (i == 0 ? 0x7f264u : 0x7f634u));
+        assert(call.arguments == (i == 0 ? std::vector<std::uint32_t>{block, 0, 7, 0, 0x7ffff, 0}
+                                        : std::vector<std::uint32_t>{block, 1}));
+        call.returned(context, 0);
+    }
+    assert(returned && !motion.active && !mgs::fulton_visuals::selecting_motion);
+    assert(memory.load32(block) == 0x09900000u && memory.load32(channel + 0xc8) == 0x123456u);
+    assert(guest_calls.empty());
+    assert(lifetime.use_count() == 1); // Completion releases the callback chain.
+    // Optional lift effects must layer through the game's normal sound call.
+    mgs::fulton_sound::lift_current = true;
+    returned = false;
+    mgs::fulton_sound::play(memory, context, work + 0x30u, [&](auto &) { returned = true; }, mgs::fulton_sound::kLiftSound);
+    assert(guest_calls.size() == 1 && !returned);
+    auto effect = std::move(guest_calls.back());
+    guest_calls.clear();
+    assert(effect.function == mgs::fulton_sound::kPlay);
+    assert(effect.arguments == (std::vector<std::uint32_t>{0x272u, 0, 0, work + 0x30u}));
+    effect.returned(context, 1);
+    assert(returned);
+    mgs::fulton_sound::stage_changed();
+    assert(!mgs::fulton_sound::current && !mgs::fulton_sound::lift_current);
+    returned = false;
+    mgs::fulton_sound::play(memory, context, work + 0x30u, [&](auto &) { returned = true; }, 0x273u);
+    assert(returned && guest_calls.empty()); // No stale stage bank may play.
+    // PO 1.02 SHDS entries: 0x272 ATRAC3plus, 0x273 ADPCM effect.
+    const auto shds272 = mgs::fulton_sound::kShds + 0x34u + 0x272u * 8u;
+    memory.words[mgs::fulton_sound::kShds] = 0x53444853u;
+    memory.words[shds272] = 0x40010105u;
+    memory.words[shds272 + 4] = 0x0100u;
+    memory.words[shds272 + 8] = 0x40010103u;
+    memory.words[shds272 + 12] = 0;
+    mgs::fulton_sound::retype_lift(memory);
+    assert(memory.load32(shds272) == 0x40010103u && memory.load32(shds272 + 4) == 0);
+    std::vector<std::uint8_t> sound_bank(0x800);
+    sound_bank[0] = 'S'; sound_bank[1] = 'P'; sound_bank[2] = 0x32; sound_bank[5] = 8;
+    sound_bank[0x7fc] = 'E'; sound_bank[0x7fd] = 'P'; sound_bank[0x7fe] = 0x32;
+    assert(mgs::fulton_sound::valid_bank(sound_bank, 0x32, 0x11000));
+    assert(!mgs::fulton_sound::valid_bank(sound_bank, 0x31, 0x8000));
+    sound_bank[4] = 1;
+    assert(!mgs::fulton_sound::valid_bank(sound_bank, 0x32, 0x11000)); // Declared size differs.
     if (argc > 1) {
         Memory captured;
         std::ifstream input(argv[1], std::ios::binary);
@@ -104,5 +227,5 @@ int main(int argc, char **argv) {
         assert(matches(captured, 0x08be0048u, cleanup_shape));
         std::cout << "Saved-RAM target selection passed: 0x" << std::hex << selected.name << '\n';
     }
-    std::cout << "Fulton selection, capacity, commit identity and stage matching passed\n";
+    std::cout << "Fulton selection, capacity, commit identity, stage matching and motion hand-back passed\n";
 }

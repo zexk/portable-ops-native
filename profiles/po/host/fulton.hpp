@@ -79,9 +79,13 @@ bool eligible(const Memory &memory, Target target) {
         (memory.load32(component) & 0x11000u) != 0x1000u) return false;
     const auto flags = memory.load32(target.work + 0x1858u);
     const auto kind = memory.load32(target.work + 0x1850u);
+    // Live st01t2 trace: prone hold-up uses flag 0x40 and motion state
+    // 0x152 (enemy clip 0xB4), without either unconscious status bit.
+    const bool prone_hold_up = (flags & 0x40u) != 0u &&
+                              (memory.load32(target.work + 0x3c0u) & 0xffffu) == 0x152u;
     // Same status mask as the original enemy query. No carried actors or
     // scripted prisoners; their callback/state contracts need separate work.
-    return (flags & 0x40399u) == 0u && (flags & 6u) != 0u &&
+    return (flags & 0x40399u) == 0u && ((flags & 6u) != 0u || prone_hold_up) &&
            (memory.load32(target.work + 0x185cu) & 0x02000000u) == 0u &&
            kind >= 20u && kind < 54u && memory.load32(target.work + 0x1438u) == 79u;
 }
@@ -100,14 +104,28 @@ Target nearest(const Memory &memory, std::uint32_t player) {
             const auto component = memory.load32(node + 0x10u);
             if (memory.contains(component, 0x28u)) {
                 Target target{memory.load32(component + 0x24u), memory.load32(component + 4u)};
-                if (eligible(memory, target) && memory.load32(target.work + 0x10u) == component) {
+                if (same(memory, target) && memory.load32(target.work + 0x10u) == component) {
                     float squared = 0;
                     for (unsigned axis = 0; axis < 3; ++axis) {
                         const float delta = std::bit_cast<float>(memory.load32(player + 0x100u + axis * 4u)) -
                                             std::bit_cast<float>(memory.load32(target.work + 0x30u + axis * 4u));
                         squared += delta * delta;
                     }
-                    if (std::isfinite(squared) && squared < distance) { best = target; distance = squared; }
+                    if (std::isfinite(squared) && squared < distance) {
+                        if (eligible(memory, target)) { best = target; distance = squared; }
+                        else if (memory.load32(target.work + 0x1850u) >= 20u &&
+                                 memory.load32(target.work + 0x1850u) < 54u) {
+                            // A chord press is the only caller during play. Keep
+                            // rejected nearby actors identifiable for live RE.
+                            std::cout << std::hex << "[fulton] nearby rejected soldier " << target.name
+                                      << " work " << target.work << " flags " << memory.load32(target.work + 0x1858u)
+                                      << '/' << memory.load32(target.work + 0x185cu)
+                                      << " behavior " << memory.load32(target.work + 0x3c0u)
+                                      << " action " << memory.load32(target.work + 0x170cu)
+                                      << " callback " << memory.load32(target.work + 0x400u)
+                                      << std::dec << std::endl;
+                        }
+                    }
                 }
             }
             node = memory.load32(node);
@@ -163,7 +181,7 @@ inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
     // Run the real script callback in this guest thread, with scheduler/HLE
     // support. A single isolated AOT unit cannot execute a whole GCL call.
     portablekit::hle_extension::call_guest(ctx, notify, {target.work},
-        [&runtime, saved, target, before, system, cleanup_address](auto &returned, std::uint32_t) {
+        [&runtime, saved, target, before, system, cleanup_address, animated](auto &returned, std::uint32_t) {
             auto &memory = runtime.memory();
             const auto finish = [&runtime, saved](auto &context) {
                 busy = false;
@@ -182,6 +200,15 @@ inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
                 finish(returned);
                 return;
             }
+            // Hide only after recruitment commits. Hiding during visual disposal
+            // left a retained soldier invisible when the callback rejected him.
+            // Match cleanup's flags before it resets the pose to the floor.
+            if (animated)
+                for (std::uint32_t field : {0x110u, 0x2e0u, 0x2e4u}) {
+                    const auto object = memory.load32(target.work + field);
+                    if (memory.contains(object + 0x5cu, 4u))
+                        memory.store32(object + 0x5cu, memory.load32(object + 0x5cu) | 0x3000u);
+                }
             portablekit::hle_extension::call_guest(returned, cleanup_address, {target.work},
                 [finish, target](auto &context, std::uint32_t) {
                     std::cout << "[fulton] soldier recovered" << std::endl;

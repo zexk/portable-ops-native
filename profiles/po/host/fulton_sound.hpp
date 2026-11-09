@@ -37,87 +37,190 @@ constexpr std::uint32_t kHandler = base + 0xc918u, kRegister = base + 0x1c5bc0u,
 constexpr std::uint32_t kAlloc = base + 0x3a478u, kPlay = base + 0xe540u;
 constexpr std::uint32_t kKey = 0x37000000u | 0x89cdf4u; // .sep, GV_StrCode("segrp_75_furuton")
 constexpr std::uint32_t kSound = 0x271u;
+// Two common extraction effects captured in PW MC as 0x9D3B/0x9D3C.
+// Bank 0x32 has two PO slots (0x272/0x273), 0x11000 bytes, and no stage loads it.
+constexpr std::uint32_t kLiftSound = 0x272u, kLiftKey = 0x37376f7du;
 // The sound context. Code loads it as 0x7FAD8 relative to the data segment
 // (ELF 0x1EED40): a relocatable image, so data offsets are per segment.
 constexpr std::uint32_t kContext = base + 0x1eed40u + 0x7fad8u;
 
 inline std::vector<std::uint8_t> bank;
+inline std::vector<std::uint8_t> lift_bank;
 inline bool current = false; // filed since the last stage change
+inline bool lift_current = false;
 
 // Our entry in the engine's bank lists (sound context: tables at +0x28C/+0x50C
 // or counted lists at +0x04/+0x790; 0x14-byte entries, data at +0, name hash
 // at +0x10, size at +0xC), or 0.
 template<class Memory>
-std::uint32_t entry(const Memory &memory) {
+std::uint32_t entry(const Memory &memory, const std::vector<std::uint8_t> &bytes, std::uint32_t key) {
     for (std::uint32_t at = kContext + 4u; at < kContext + 0x790u + 64u * 0x14u; at += 4u)
-        if (memory.load32(at + 0x10u) == (kKey & 0xffffffu) && memory.load32(at) &&
-            memory.load32(at + 0xcu) == bank.size())
+        if (memory.load32(at + 0x10u) == (key & 0xffffffu) && memory.load32(at) &&
+            memory.load32(at + 0xcu) == bytes.size())
             return at;
     return 0;
 }
 
-inline void stage_changed() { current = false; }
+inline void stage_changed() { current = lift_current = false; }
 
 // Files the bank for this stage if needed, then next.
-inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
-                    std::function<void(psprecomp::AllegrexContext &)> next) {
-    if (current || bank.empty()) { next(ctx); return; }
-    portablekit::hle_extension::call_guest(ctx, kAlloc, {0u, std::uint32_t(bank.size()), 0u},
-        [&runtime, next](auto &context, std::uint32_t buffer) {
+inline void prepare_bank(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
+                         const std::vector<std::uint8_t> &bytes, bool &ready,
+                         std::uint32_t key, std::uint32_t id,
+                         std::function<void(psprecomp::AllegrexContext &)> next) {
+    if (bytes.empty()) { next(ctx); return; }
+    if (ready) {
+        // Mission retry can clear sound lists without reloading mgp_stage.
+        // A host-side "current" flag alone then leaves every later lift mute.
+        auto &memory = runtime.memory();
+        const auto at = entry(memory, bytes, key);
+        const auto buffer = at ? memory.load32(at) : 0u;
+        if (memory.contains(buffer, bytes.size()) &&
+            memory.load32(buffer) == (0x5053u | id << 16u) &&
+            memory.load32(buffer + 4u) == bytes.size() &&
+            memory.load32(buffer + std::uint32_t(bytes.size()) - 4u) == (0x5045u | id << 16u)) {
+            portablekit::hle_extension::call_guest(ctx, kActivate, {id, buffer, 0u},
+                [next](auto &active, std::uint32_t) { next(active); });
+            return;
+        }
+        ready = false;
+        std::cout << "[fulton] sound bank 0x" << std::hex << id << std::dec
+                  << " lost during stage reset; reloading" << std::endl;
+    }
+    portablekit::hle_extension::call_guest(ctx, kAlloc, {0u, std::uint32_t(bytes.size()), 0u},
+        [&runtime, &bytes, &ready, key, id, next](auto &context, std::uint32_t buffer) {
             auto &memory = runtime.memory();
-            if (!buffer || !memory.contains(buffer, bank.size())) {
+            if (!buffer || !memory.contains(buffer, bytes.size())) {
                 std::cerr << "[fulton] no memory for the sound bank" << std::endl;
                 next(context);
                 return;
             }
-            memory.copy_in(buffer, bank);
+            memory.copy_in(buffer, bytes);
             // Filing only validates the bank with sound2. Playable takes its
             // data pointer in sound2's bank entry: what engine 0xD1A8 does for
             // a sound group the scenario asks for, through stub 0x1C5B20
             // (sound2 0xE43865EC: bank id, data).
-            auto done = [&runtime, buffer, next](auto &filed, std::uint32_t result) {
-                if (const auto at = entry(runtime.memory()))
+            auto done = [&runtime, &bytes, &ready, key, id, buffer, next](auto &filed, std::uint32_t result) {
+                if (const auto at = entry(runtime.memory(), bytes, key))
                     runtime.memory().store32(at + 8u, runtime.memory().load32(at + 8u) | 1u); // active, as 0xD1A8 marks it
-                portablekit::hle_extension::call_guest(filed, kActivate, {0x31u, buffer, 0u},
-                    [result, next](auto &active, std::uint32_t) {
-                        current = true;
-                        std::cout << "[fulton] sound bank filed and active for this stage (" << result << ")" << std::endl;
+                portablekit::hle_extension::call_guest(filed, kActivate, {id, buffer, 0u},
+                    [&ready, id, result, next](auto &active, std::uint32_t) {
+                        ready = true;
+                        std::cout << "[fulton] sound bank 0x" << std::hex << id << std::dec
+                                  << " filed and active for this stage (" << result << ")" << std::endl;
                         next(active);
                     });
             };
-            if (const auto at = entry(memory)) {
+            if (const auto at = entry(memory, bytes, key)) {
                 memory.store32(at, buffer);
-                portablekit::hle_extension::call_guest(context, kRegister, {buffer, buffer, kKey}, done);
+                portablekit::hle_extension::call_guest(context, kRegister, {buffer, buffer, key}, done);
             } else {
                 portablekit::hle_extension::call_guest(context, kHandler,
-                    {buffer, kKey, 2u, std::uint32_t(bank.size()), 1u}, done);
+                    {buffer, key, 2u, std::uint32_t(bytes.size()), 1u}, done);
             }
         });
 }
 
+// sound2's bank table: the executable's SHDS header (ELF 0x1D779C) gets its
+// bank table pointer at +0x18 from sound2 0x1008; 16-byte entries indexed by
+// bank id: data (0 = not playable), data, capacity, state byte at +0xC.
+constexpr std::uint32_t kShds = base + 0x1d779cu;
+
+// The SHDS sound table (header +0x34, 8 bytes an id) types 0x272 as ATRAC3plus
+// (05 01 01 40 00 01 00 00) and 0x273 as an ADPCM effect (03 01 01 40 00 00 00
+// 00); sound2 0x5440 puts byte 0's low nibble into the play id. Type 5 effects
+// share voices 0x1C-0x21 with one playing at a time (sound2 0x2D2D0 = 1), so
+// our ADPCM 0x272, started beside the balloon 0x271, took the balloon's voice
+// and then failed ATRAC setup: neither played. No stock bank uses 0x272.
+template<class Memory>
+void retype_lift(Memory &memory) {
+    const auto to = kShds + 0x34u + kLiftSound * 8u;
+    if (!memory.contains(to, 16u) || memory.load32(kShds) != 0x53444853u) return;
+    memory.store32(to, memory.load32(to + 8u));
+    memory.store32(to + 4u, memory.load32(to + 12u));
+}
+
+inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
+                    std::function<void(psprecomp::AllegrexContext &)> next) {
+    if (!lift_bank.empty()) retype_lift(runtime.memory());
+    prepare_bank(runtime, ctx, bank, current, kKey, 0x31u, [&runtime, next](auto &context) {
+        prepare_bank(runtime, context, lift_bank, lift_current, kLiftKey, 0x32u, next);
+    });
+}
+// sound2 0x2544 (play) leaves why it refused in this word: 1 bank not loaded,
+// 2 no voice, 4 already playing, 8 on-demand load failed. sound2 is loaded at
+// 0x08B10100 in this build; trusted only while its SHDS pointer matches.
+constexpr std::uint32_t kSound2 = 0x08b10100u;
+
+template<class Memory>
+std::uint32_t shds_entry(const Memory &memory, std::uint32_t id) {
+    if (!memory.contains(kShds, 0x20u) || memory.load32(kShds) != 0x53444853u) return 0;
+    const auto at = memory.load32(kShds + 0x18u) + id * 16u;
+    return memory.contains(at, 16u) ? at : 0u;
+}
+
 // Plays the Fulton sound at a guest position vector (3 floats), or 2D with 0.
-template<class Next>
-void play(psprecomp::AllegrexContext &ctx, std::uint32_t position, Next next) {
-    if (!current) { next(ctx); return; }
+// sound2's bank entry can be cleared between the stage-start activation and
+// this call (live PO 1.02: after a stage reinit both banks read data 0 and
+// every play was refused), so the bank is activated again first when needed.
+template<class Memory, class Next>
+void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t position, Next next,
+          std::uint32_t sound = kSound) {
+    if (!(sound == kSound ? current : lift_current)) { next(ctx); return; }
     if (portablekit::hle_extension::env("FULTON_SOUND_2D")) position = 0;
-    portablekit::hle_extension::call_guest(ctx, kPlay, {kSound, 0u, 0u, position},
-        [next](auto &context, std::uint32_t handle) {
-            if (!handle) std::cerr << "[fulton] sound 0x271 refused" << std::endl;
-            next(context);
-        });
+    const std::uint32_t id = sound == kSound ? 0x31u : 0x32u;
+    const auto &bytes = sound == kSound ? bank : lift_bank;
+    auto start = [&memory, position, next, sound, id](psprecomp::AllegrexContext &context) {
+        portablekit::hle_extension::call_guest(context, kPlay, {sound, 0u, 0u, position},
+            [&memory, next, sound, id](auto &played, std::uint32_t handle) {
+                if (!handle) {
+                    std::cerr << std::hex << "[fulton] sound 0x" << sound << " refused";
+                    if (memory.contains(kSound2 + 0x2d340u, 4u) && memory.load32(kSound2 + 0x2d340u) == kShds)
+                        std::cerr << " (sound2 reason " << memory.load32(kSound2 + 0x2d2d4u) << ')';
+                    if (const auto at = shds_entry(memory, id))
+                        std::cerr << " bank 0x" << id << " data " << memory.load32(at) << " state "
+                                  << (memory.load32(at + 0xcu) & 0xffu);
+                    std::cerr << std::dec << std::endl;
+                }
+                next(played);
+            });
+    };
+    const auto listed = bytes.empty() ? 0u : entry(memory, bytes, sound == kSound ? kKey : kLiftKey);
+    const auto buffer = listed ? memory.load32(listed) : 0u;
+    const auto at = shds_entry(memory, id);
+    if (!buffer || !at || memory.load32(at) == buffer) { start(ctx); return; }
+    std::cout << std::hex << "[fulton] sound bank 0x" << id << " released (data " << memory.load32(at)
+              << " state " << (memory.load32(at + 0xcu) & 0xffu) << "); activating again" << std::dec << std::endl;
+    portablekit::hle_extension::call_guest(ctx, kActivate, {id, buffer, 0u},
+        [start](auto &active, std::uint32_t) { start(active); });
+}
+
+inline bool valid_bank(std::span<const std::uint8_t> bytes, std::uint32_t id, std::size_t limit) {
+    if (bytes.size() < 0x40 || bytes.size() > limit) return false;
+    auto word = [&bytes](unsigned at) {
+        return std::uint32_t(bytes[at]) | std::uint32_t(bytes[at + 1]) << 8u |
+               std::uint32_t(bytes[at + 2]) << 16u | std::uint32_t(bytes[at + 3]) << 24u;
+    };
+    const auto end = bytes.size() - 4;
+    return bytes[0] == 'S' && bytes[1] == 'P' && bytes[2] == id && bytes[3] == 0 &&
+           word(4) == bytes.size() && bytes[end] == 'E' && bytes[end + 1] == 'P' &&
+           bytes[end + 2] == id && bytes[end + 3] == 0;
 }
 
 inline void install(psprecomp::Runtime &) {
     if (!fulton_assets::enabled()) return;
     const char *directory = portablekit::hle_extension::env("FULTON_STAGE_DIR");
     if (!directory) return;
-    std::ifstream file(std::filesystem::path(directory) / "fulton.sep", std::ios::binary);
-    bank.assign(std::istreambuf_iterator<char>(file), {});
-    // Same checks sound2 makes: SP + id at the start, EP + id at the end.
-    if (bank.size() < 0x40 || bank[0] != 'S' || bank[1] != 'P' || bank[2] != 0x31 || bank[3] != 0 ||
-        bank[bank.size() - 4] != 'E' || bank[bank.size() - 3] != 'P' || bank[bank.size() - 2] != 0x31) {
-        if (!bank.empty()) std::cerr << "[fulton] fulton.sep is not a bank 0x31" << std::endl;
-        bank.clear();
-    }
+    auto load = [directory](const char *name, std::uint32_t id, std::size_t limit) {
+        std::ifstream file(std::filesystem::path(directory) / name, std::ios::binary);
+        std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(file), {}};
+        if (!bytes.empty() && !valid_bank(bytes, id, limit)) {
+            std::cerr << "[fulton] " << name << " failed bank id/size/footer checks" << std::endl;
+            bytes.clear();
+        }
+        return bytes;
+    };
+    bank = load("fulton.sep", 0x31u, 0x8000u);
+    lift_bank = load("fulton-lift.sep", 0x32u, 0x11000u);
 }
 } // namespace mgs::fulton_sound
