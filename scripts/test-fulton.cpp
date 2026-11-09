@@ -131,13 +131,51 @@ int main(int argc, char **argv) {
     memory.store32(work + 0x68, 0x5678dcba);
     mgs::fulton_visuals::face_player(memory);
     mgs::fulton_visuals::face_player(memory); // Preserve original headings across ticks.
-    assert(memory.load32(work + 0x60) == 0xf123abcd);
+    const auto turned = mgs::fulton_geometry::turn(mgs::fulton_geometry::turn(0x1234, 0xf123), 0xf123);
+    assert(memory.load32(work + 0x60) == (std::uint32_t(turned) << 16 | 0xabcdu));
+    assert(turned != 0x1234 && turned != 0xf123); // Gradual, shortest-arc rotation.
     assert(memory.load32(work + 0x68) == 0xf123dcba);
     memory.store16(work + 0x6a, 0x4321); // Engine takes ownership back.
     mgs::fulton_visuals::restore_facing(memory);
     assert(memory.load32(work + 0x60) == 0x1234abcd);
     assert(memory.load32(work + 0x68) == 0x4321dcba);
     mgs::fulton_visuals::state = {};
+    {
+        using namespace mgs::fulton_geometry;
+        assert(turn(0xfff0, 0x0010) == 0xfff4); // Cross angle wrap in either direction.
+        assert(turn(0x0010, 0xfff0) == 0x000c);
+        assert(turn(0x1000, 0x1001) == 0x1001); // No one-unit stall.
+        auto heading = std::uint16_t(0x8001);
+        for (unsigned i = 0; i < 100; ++i) heading = turn(heading, 0x41ea);
+        assert(heading == 0x41ea);
+        // 90-degree Y bone: local -Z becomes world -X; local +Y stays +Y.
+        const Matrix spine{0,0,-1,0, 0,1,0,0, 1,0,0,0, 1000,2000,3000,1};
+        const auto anchor = transform(spine, {0,100,-200});
+        assert(anchor == (Point{800,2100,3000}));
+        // Prone bone rotated about X: local offsets must not become world-Y trims.
+        const Matrix prone{1,0,0,0, 0,0,1,0, 0,-1,0,0, 1000,2000,3000,1};
+        assert(transform(prone, {0,100,-200}) == (Point{1000,2200,3100}));
+        const auto pose = harness(anchor, {800,2100,2900});
+        const auto tip = transform(pose, {0,-1000,0});
+        assert(std::abs(tip[0] - anchor[0]) < 0.01f);
+        assert(std::abs(tip[1] - anchor[1]) < 1.0f);
+        assert(tip[2] > anchor[2] + 999); // Effector points along intended aim.
+        for (const auto point : {Point{800,2000,3000}, Point{800,2100,3000}})
+            for (float value : harness(anchor, point)) assert(std::isfinite(value));
+        const auto small = scaled(pose, 0.02f);
+        assert(small[12] == anchor[0] && small[13] == anchor[1] && small[14] == anchor[2]);
+        assert(small[15] == 1); // Growth must not scale translation or homogeneous W.
+        constexpr std::uint32_t object = 0x09c10000, bones = 0x09c20000;
+        memory.store32(object + 0xac, bones);
+        assert(!bone(memory, object, 2)); // Uninitialized matrices are not usable.
+        for (unsigned i = 0; i < 16; ++i)
+            memory.store32(bones + 2 * 64 + i * 4, std::bit_cast<std::uint32_t>(spine[i]));
+        assert(bone(memory, object, 2) == spine);
+        memory.store32(bones + 2 * 64, 0x7fc00000u);
+        assert(!bone(memory, object, 2)); // Never feed NaN poses to rendering.
+        memory.store32(object + 0xac, 0);
+        assert(!bone(memory, object, 2));
+    }
     memory.words[work + 0x1850] = 23;
     memory.words[work + 0x1858] = 0x804;
     memory.words[component] = 0x1002;

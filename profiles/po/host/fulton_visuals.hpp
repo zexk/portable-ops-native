@@ -2,6 +2,7 @@
 
 #include "camera.hpp"
 #include "fulton_assets.hpp"
+#include "fulton_geometry.hpp"
 #include "fulton_sound.hpp"
 
 #include <functional>
@@ -78,6 +79,8 @@ struct State {
     std::array<float, 3> position{};
     std::uint16_t yaw{};
     std::optional<std::array<std::uint16_t, 2>> old_yaw;
+    std::array<std::uint16_t, 2> owned_yaw{};
+    std::optional<fulton_geometry::Matrix> harness_pose;
     unsigned frames{}, phase_frames{};
     bool lift_released = false;
     unsigned foley_played = 0;
@@ -104,12 +107,15 @@ inline std::vector<std::uint32_t> extra_sounds(Phase phase, float cursor, float 
 }
 
 // PO control starts at enemy +0x20: current/target yaw at +0x42/+0x4A.
-// Match the player's current heading while attachment and lift own the pose.
+// Approach the player's heading +90 degrees while extraction owns the pose.
 template<class Memory>
 void face_player(Memory &memory) {
-    if (!state.old_yaw)
+    if (!state.old_yaw) {
         state.old_yaw = {memory.load16(state.enemy + 0x62u), memory.load16(state.enemy + 0x6au)};
-    memory.store16(state.enemy + 0x62u, state.yaw);
+        state.owned_yaw = *state.old_yaw;
+    }
+    state.owned_yaw = {fulton_geometry::turn(state.owned_yaw[0], state.yaw), state.yaw};
+    memory.store16(state.enemy + 0x62u, state.owned_yaw[0]);
     memory.store16(state.enemy + 0x6au, state.yaw);
 }
 
@@ -118,7 +124,7 @@ void restore_facing(Memory &memory) {
     if (!state.old_yaw) return;
     for (unsigned i = 0; i < 2; ++i) {
         const auto at = state.enemy + (i == 0 ? 0x62u : 0x6au);
-        if (memory.load16(at) == state.yaw) memory.store16(at, (*state.old_yaw)[i]);
+        if (memory.load16(at) == state.owned_yaw[i]) memory.store16(at, (*state.old_yaw)[i]);
     }
     state.old_yaw.reset();
 }
@@ -143,8 +149,9 @@ inline bool trace_motion = false;
 // halves", docs/animation-system.md).
 using Request = std::array<std::uint32_t, 5>;
 inline std::unordered_map<std::uint32_t, std::array<std::optional<Request>, 2>> learned;
-// Heights above the spine bone; MGSPO_FULTON_BALLOON_Y / _HARNESS_Y override.
-inline float balloon_y = 600, harness_y = 300;
+// World-Y trims: harness above its local anchor; full-size balloon above it.
+// Defaults follow PW's anchor and 1000 * growth height.
+inline float balloon_y = 1000, harness_y = 0;
 inline std::vector<std::uint8_t> placement_bytes;
 inline bool placement_prepared = false;
 
@@ -312,7 +319,7 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
     state.phase = Phase::Preparing;
     state.player = player;
     state.enemy = enemy;
-    state.yaw = runtime.memory().load16(player + 0x132u);
+    state.yaw = std::uint16_t(runtime.memory().load16(player + 0x132u) + 0x4000u);
     state.finish = std::move(finish);
     const auto saved = ctx;
     auto &memory = runtime.memory();
@@ -413,7 +420,7 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     std::optional<std::uint32_t> lift_effect;
     bool hand_snake = false, sound = false;
     std::vector<std::uint32_t> extra_effects;
-    float scale = 1, harness_scale = 1, rise = 0;
+    float scale = 1, harness_scale = 1;
     switch (state.phase) {
     case Phase::Attaching: {
         mgs::set_action(runtime, ctx, player, 0x13bu);
@@ -460,34 +467,36 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
             dispose(runtime, ctx, true);
             return true;
         }
-        const float progress = end > 0 ? std::clamp(frame / end, 0.0f, 1.0f) : 0;
-        rise = progress * progress * 3000;
         break;
     }
     default: break;
     }
-    // The balloon rides the soldier's upper spine (bone 2): render object at
-    // work +0x110, bone matrices at object +0xAC, 0x40 each, translation +0x30.
+    // PO ULUS10202 1.02: render object work +0x110, bones at object +0xAC.
+    // PW's local offset follows the spine orientation, including prone motion.
+    // Never move the actor root to imitate the still-unmapped visible slide.
     auto anchor = state.position;
-    float above = 800;
     const auto body = memory.load32(state.enemy + 0x110u);
-    if (memory.contains(body + 0xacu, 4u)) {
-        const auto spine = memory.load32(body + 0xacu) + 2u * 0x40u + 0x30u;
-        if (memory.contains(spine, 12u)) {
-            for (unsigned i = 0; i < 3; ++i) anchor[i] = std::bit_cast<float>(memory.load32(spine + i * 4u));
-            above = balloon_y;
+    if (const auto spine = fulton_geometry::bone(memory, body, 2)) {
+        anchor = fulton_geometry::transform(*spine, {0, 100, -200});
+        // Follow placement while the soldier turns. At yank entry PW aims
+        // from bone 4, then preserves orientation via the harness effector
+        // (local 0,-1000,0). Retaining rotation avoids zero-size tips.
+        if (!state.harness_pose || state.phase == Phase::Attaching || next_clip == kYankClip) {
+            if (const auto chest = fulton_geometry::bone(memory, body, 4))
+                state.harness_pose = fulton_geometry::harness(anchor,
+                    fulton_geometry::transform(*chest, {0, 100, -300}));
         }
     }
-    // Balloon above the spine; harness and tie on it.
-    auto place = [&memory, &anchor](std::uint32_t object, float scale, float height) {
-        for (unsigned i = 0; i < 16; ++i) {
-            float value = i == 15 ? 1.0f : (i == 0 || i == 5 || i == 10 ? scale : 0.0f);
-            if (i >= 12 && i <= 14) value = anchor[i - 12] + (i == 13 ? height : 0);
-            memory.store32(object + 0x10u + i * 4u, std::bit_cast<std::uint32_t>(value));
-        }
+    auto harness = state.harness_pose.value_or(fulton_geometry::identity());
+    for (unsigned i = 0; i < 3; ++i) harness[12 + i] = anchor[i] + (i == 1 ? harness_y : 0);
+    auto balloon = fulton_geometry::identity();
+    for (unsigned i = 0; i < 3; ++i) balloon[12 + i] = harness[12 + i] + (i == 1 ? balloon_y * scale : 0);
+    auto place = [&memory](std::uint32_t object, const fulton_geometry::Matrix &matrix) {
+        for (unsigned i = 0; i < matrix.size(); ++i)
+            memory.store32(object + 0x10u + i * 4u, std::bit_cast<std::uint32_t>(matrix[i]));
     };
-    place(state.object, scale, above + rise);
-    place(state.harness, harness_scale, harness_y);
+    place(state.object, fulton_geometry::scaled(balloon, scale));
+    place(state.harness, fulton_geometry::scaled(harness, harness_scale));
     const auto saved = ctx;
     auto draw = [saved, resume](Context &context) {
         portablekit::hle_extension::call_guest(context, base + 0x14b00u, {state.object},

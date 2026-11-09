@@ -163,8 +163,12 @@ out/test-fulton
 attaches the device with the optional converted PW `snake_coop` clip 156
 (`fult_place.mtar`), falling back to PO's crouch-and-place clip (`0x25` of
 `sna_wp_claymore`) when absent. The harness (`fult_item_body`) and balloon ride the
-soldier's upper spine (bone 2; `MGSPO_FULTON_HARNESS_Y` and
-`MGSPO_FULTON_BALLOON_Y` set their heights above it); the soldier plays PW's
+soldier's upper spine. The harness uses bone 2's local point `(0,100,-200)`
+and bone 4 for initial orientation, with PW's model rotation correction.
+The balloon stays upright, `1000 * growth` above the harness.
+`MGSPO_FULTON_HARNESS_Y` adds a world-Y trim (default 0);
+`MGSPO_FULTON_BALLOON_Y` overrides the full-size balloon height (default
+1000). The soldier plays PW's
 lift clips (`enedam` 101 then 103, converted by the metal-gear `mtar.py` into
 `fult_enemy.mtar`) and is captured on the last frame. Afterwards Snake gets
 back the engine's last own motion requests. Failed or interrupted attachment
@@ -195,9 +199,14 @@ new audio playback on a fresh launch; logs show bank activation, completed
 recovery and no sound refusals. Survival across a stage reset still needs
 a live check for this new bank.
 Other voice families and two remaining attachment cues remain unmapped.
-Current body placement snaps the soldier's yaw to Snake's. PW instead
-slides/turns the prone body into a T-shaped arrangement, perpendicular to
-player forward. Matching that placement remains pending.
+Body placement now eases the soldier toward Snake's starting heading +90
+degrees along the shortest arc. The one-eighth-per-tick easing approximates
+the PW capture; its exact integer rule remains unmapped. The actor root
+position stays unchanged, as observed in PW. Harness orientation follows
+the two bone points during attachment, then stays fixed while its origin
+follows bone 2 during lift. These placement changes need a live PO check;
+the visible body slide still needs animation/root-bone analysis. Missing
+or invalid bone matrices use the saved enemy position and a rigid fallback.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
 `fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
