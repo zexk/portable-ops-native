@@ -3,6 +3,7 @@
 // Optional recovery for ULUS-10202 1.02. All addresses refer to its decrypted
 // executable. Stage helpers are located from their instructions after linking.
 #include "portablekit/hle_extension.hpp"
+#include "fulton_visuals.hpp"
 
 #include <array>
 #include <bit>
@@ -118,9 +119,10 @@ inline psprecomp::Runtime::RecompiledFunction original_update = nullptr;
 inline std::uint32_t notify = 0, cleanup = 0;
 inline bool held = false, busy = false;
 
-inline void module_ready(psprecomp::Runtime &, std::string_view, std::uint32_t base,
+inline void module_ready(psprecomp::Runtime &, std::string_view name, std::uint32_t base,
                          std::span<const std::uint8_t> code) {
     if (!original_update) return;
+    if (name == "mgp_stage") { fulton_visuals::invalidate(); busy = false; }
     const auto n = find(code, notify_shape), c = find(code, cleanup_shape);
     if (!n || !c) return;
     notify = base + *n;
@@ -128,26 +130,23 @@ inline void module_ready(psprecomp::Runtime &, std::string_view, std::uint32_t b
     std::cout << "[fulton] stage capture helpers found" << std::endl;
 }
 
-inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexContext &ctx) {
-    auto &runtime = static_cast<psprecomp::Runtime &>(corpus);
+inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx, Target target) {
     auto &memory = runtime.memory();
-    const auto player = ctx.gpr[4];
-    const auto resume = [&] { original_update(corpus, ctx); };
-    if (!memory.contains(player, 0xc00u) || memory.load32(engine + 0x2f7060u) != player) { resume(); return; }
-    const auto pad = memory.load32(player + 0x720u);
-    const bool down = memory.contains(pad, 4u) && (memory.load32(pad) & chord) == chord;
-    const bool pressed = down && !held;
-    held = down;
     const auto system = memory.load32(engine + 0x1f11d0u);
-    if (!pressed || busy || !memory.contains(system, 0x71acu) ||
-        memory.load32(engine + 0x20f790u) == 0u || memory.load32(player + 0x58u) != 0x7e8110u ||
-        (memory.load32(engine + 0x258b74u) & 0x2000u) != 0u ||
-        !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape) ||
-        !runtime.has_function(notify) || !runtime.has_function(cleanup)) { resume(); return; }
+    if (!memory.contains(system, 0x71acu) || !eligible(memory, target) ||
+        !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape)) {
+        busy = false;
+        std::cout << "[fulton] target or stage changed; capture cancelled" << std::endl;
+        original_update(runtime, ctx);
+        return;
+    }
     const auto before = memory.load32(system + 0x3c98u);
-    if (before >= 80u) { std::cout << "[fulton] pending captures full" << std::endl; resume(); return; }
-    const auto target = nearest(memory, player);
-    if (!target.work) { std::cout << "[fulton] no eligible soldier within reach" << std::endl; resume(); return; }
+    if (before >= 80u) {
+        busy = false;
+        std::cout << "[fulton] pending captures full" << std::endl;
+        original_update(runtime, ctx);
+        return;
+    }
     const auto saved = ctx;
     const auto cleanup_address = cleanup;
     busy = true;
@@ -181,11 +180,50 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
         });
 }
 
+inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexContext &ctx) {
+    auto &runtime = static_cast<psprecomp::Runtime &>(corpus);
+    auto &memory = runtime.memory();
+    const auto player = ctx.gpr[4];
+    const auto resume = [&runtime](auto &context) { original_update(runtime, context); };
+    if (!memory.contains(player, 0xc00u) || memory.load32(engine + 0x2f7060u) != player) { resume(ctx); return; }
+    if (fulton_visuals::tick(runtime, ctx, player, resume)) return;
+    const auto pad = memory.load32(player + 0x720u);
+    const bool down = memory.contains(pad, 4u) && (memory.load32(pad) & chord) == chord;
+    const bool pressed = down && !held;
+    held = down;
+    const auto system = memory.load32(engine + 0x1f11d0u);
+    if (!pressed || busy || !memory.contains(system, 0x71acu) ||
+        memory.load32(engine + 0x20f790u) == 0u || memory.load32(player + 0x58u) != 0x7e8110u ||
+        (memory.load32(engine + 0x258b74u) & 0x2000u) != 0u ||
+        !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape) ||
+        !runtime.has_function(notify) || !runtime.has_function(cleanup)) { resume(ctx); return; }
+    if (memory.load32(system + 0x3c98u) >= 80u) {
+        std::cout << "[fulton] pending captures full" << std::endl;
+        resume(ctx);
+        return;
+    }
+    const auto target = nearest(memory, player);
+    if (!target.work) { std::cout << "[fulton] no eligible soldier within reach" << std::endl; resume(ctx); return; }
+    if (fulton_assets::enabled()) {
+        busy = true;
+        fulton_visuals::begin(runtime, ctx, player, target.work, resume,
+            [&runtime, target](auto &context, bool complete) {
+                busy = false;
+                if (complete) capture(runtime, context, target);
+                else {
+                    std::cout << "[fulton] visual sequence cancelled; soldier retained" << std::endl;
+                    original_update(runtime, context);
+                }
+            });
+    } else capture(runtime, ctx, target);
+}
+
 inline void install(psprecomp::Runtime &runtime) {
     const char *value = portablekit::hle_extension::env("FULTON");
     if (!value || std::strcmp(value, "1") != 0) return;
     original_update = runtime.registered_function(update);
     if (!original_update) return;
+    fulton_visuals::install(runtime);
     runtime.register_function(update, &player_update, "po_fulton_player_update");
     std::cout << "[fulton] prototype enabled; L + R + Triangle near unconscious soldier" << std::endl;
 }

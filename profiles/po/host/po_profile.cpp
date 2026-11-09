@@ -77,6 +77,7 @@ const GameProfile &game() {
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 
+        .register_extra_hle = &mgs::fulton_assets::install,
         .patch_loaded_image = &patch_image,
         .module_code_ready = &mgs::fulton::module_ready,
         .camera = &mgs::kCameraDriver,

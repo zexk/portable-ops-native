@@ -138,10 +138,37 @@ Save/reload acceptance remains unverified.
 Selection and commit checks run without game data:
 
 ```sh
-c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
+c++ -std=c++20 -Iportablekit/include -Iportablekit/host -Icommon/host \
     scripts/test-fulton.cpp -o out/test-fulton
 out/test-fulton
 ```
+
+### Developer visual experiment
+
+`MGSPO_FULTON_VISUALS=1` adds the PW PSP balloon model. Snake attaches it with
+PO's own crouch-and-place clip (the TNT/claymore/magazine one: clip `0x25` of
+`sna_wp_claymore`), then the balloon inflates and rises. Both checked live.
+The soldier still vanishes without a lift animation. Failed or interrupted
+attachment cancels capture and leaves the soldier present.
+
+Provide a local asset directory containing `fult_item_balloon.mdp` and
+`fult_item_balloon.txp` from PW PSP. PO's texture loader expects its own
+layout, so the script converts the TXP. Prepare selected stages from an
+extracted PO disc:
+
+```sh
+python3 scripts/prepare-fulton-assets.py STAGE_DIRECTORY ASSET_DIRECTORY OUTPUT \
+    --stage st01 --stage st01t1 --stage st01t2
+MGSPO_FULTON=1 MGSPO_FULTON_VISUALS=1 MGSPO_FULTON_STAGE_DIR=OUTPUT \
+    out/po/bin/PortableOpsNative
+```
+
+The stage filter verifies both original and replacement hashes. It supplies
+prepared bytes only in memory; the disc image stays untouched. Stages without
+prepared donor data cannot run this visual experiment.
+`MGSPO_FULTON_TRACE_MOTION=1` logs every motion request and the player's
+motion channels (two 0x80-byte layers). Position Snake facing
+the unconscious soldier for the attachment test.
 
 ## Testing without a window
 
