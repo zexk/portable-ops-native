@@ -3,6 +3,7 @@
 // Optional recovery for ULUS-10202 1.02. All addresses refer to its decrypted
 // executable. Stage helpers are located from their instructions after linking.
 #include "portablekit/hle_extension.hpp"
+#include "fulton_sound.hpp"
 #include "fulton_visuals.hpp"
 
 #include <array>
@@ -61,6 +62,14 @@ inline std::optional<std::uint32_t> find(std::span<const std::uint8_t> code,
 
 struct Target { std::uint32_t work{}, name{}; };
 
+// Still the same soldier. After the lift animation his state is no longer the
+// unconscious one eligible() wants, so the capture checks identity only.
+template<class Memory>
+bool same(const Memory &memory, Target target) {
+    if (!target.name || !memory.contains(target.work, 0x1bb0u) || memory.load32(target.work) != target.name) return false;
+    const auto component = memory.load32(target.work + 0x10u);
+    return memory.contains(component, 0x28u) && memory.load32(component + 4u) == target.name;
+}
 template<class Memory>
 bool eligible(const Memory &memory, Target target) {
     if (!target.name || !memory.contains(target.work, 0x1bb0u) ||
@@ -118,11 +127,12 @@ bool appended(const Memory &memory, std::uint32_t system, std::uint32_t before, 
 inline psprecomp::Runtime::RecompiledFunction original_update = nullptr;
 inline std::uint32_t notify = 0, cleanup = 0;
 inline bool held = false, busy = false;
+inline std::uint32_t watch_work = 0; inline unsigned watch_frames = 0; // post-capture trace
 
 inline void module_ready(psprecomp::Runtime &, std::string_view name, std::uint32_t base,
                          std::span<const std::uint8_t> code) {
     if (!original_update) return;
-    if (name == "mgp_stage") { fulton_visuals::invalidate(); busy = false; }
+    if (name == "mgp_stage") { fulton_visuals::invalidate(); fulton_sound::stage_changed(); busy = false; }
     const auto n = find(code, notify_shape), c = find(code, cleanup_shape);
     if (!n || !c) return;
     notify = base + *n;
@@ -130,10 +140,10 @@ inline void module_ready(psprecomp::Runtime &, std::string_view name, std::uint3
     std::cout << "[fulton] stage capture helpers found" << std::endl;
 }
 
-inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx, Target target) {
+inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx, Target target, bool animated = false) {
     auto &memory = runtime.memory();
     const auto system = memory.load32(engine + 0x1f11d0u);
-    if (!memory.contains(system, 0x71acu) || !eligible(memory, target) ||
+    if (!memory.contains(system, 0x71acu) || !(animated ? same(memory, target) : eligible(memory, target)) ||
         !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape)) {
         busy = false;
         std::cout << "[fulton] target or stage changed; capture cancelled" << std::endl;
@@ -173,8 +183,9 @@ inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
                 return;
             }
             portablekit::hle_extension::call_guest(returned, cleanup_address, {target.work},
-                [finish](auto &context, std::uint32_t) {
+                [finish, target](auto &context, std::uint32_t) {
                     std::cout << "[fulton] soldier recovered" << std::endl;
+                    watch_work = target.work; watch_frames = 90;
                     finish(context);
                 });
         });
@@ -187,6 +198,13 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
     const auto resume = [&runtime](auto &context) { original_update(runtime, context); };
     if (!memory.contains(player, 0xc00u) || memory.load32(engine + 0x2f7060u) != player) { resume(ctx); return; }
     if (fulton_visuals::tick(runtime, ctx, player, resume)) return;
+    if (watch_frames && --watch_frames % 10 == 0 && memory.contains(watch_work, 0x1bb0u)) {
+        const auto component = memory.load32(watch_work + 0x10u);
+        std::cout << std::hex << "[fulton] after capture: component " << (memory.contains(component, 4u) ? memory.load32(component) : 0)
+                  << " proc " << memory.load32(watch_work + 0x1438u) << " flags " << memory.load32(watch_work + 0x1858u)
+                  << " kind " << memory.load32(watch_work + 0x1850u) << " y " << std::bit_cast<float>(memory.load32(watch_work + 0x34u))
+                  << std::dec << std::endl;
+    }
     const auto pad = memory.load32(player + 0x720u);
     const bool down = memory.contains(pad, 4u) && (memory.load32(pad) & chord) == chord;
     const bool pressed = down && !held;
@@ -209,7 +227,7 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
         fulton_visuals::begin(runtime, ctx, player, target.work, resume,
             [&runtime, target](auto &context, bool complete) {
                 busy = false;
-                if (complete) capture(runtime, context, target);
+                if (complete) capture(runtime, context, target, true);
                 else {
                     std::cout << "[fulton] visual sequence cancelled; soldier retained" << std::endl;
                     original_update(runtime, context);
@@ -224,6 +242,7 @@ inline void install(psprecomp::Runtime &runtime) {
     original_update = runtime.registered_function(update);
     if (!original_update) return;
     fulton_visuals::install(runtime);
+    fulton_sound::install(runtime);
     runtime.register_function(update, &player_update, "po_fulton_player_update");
     std::cout << "[fulton] prototype enabled; L + R + Triangle near unconscious soldier" << std::endl;
 }

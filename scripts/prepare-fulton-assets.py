@@ -2,7 +2,8 @@
 """Add local Fulton donors to stage archives without changing disc file sizes.
 
 STAGES is an extracted PO stage directory. ASSETS contains the PW PSP balloon
-MDP and TXP (the TXP is converted to PO's layout). No donor data is shipped.
+MDP and TXP (the TXP is converted to PO's layout) and fult_enemy.mtar, the
+soldier lift clips converted by tools/portable-ops/mtar.py. No donor data is shipped.
 """
 import argparse
 import hashlib
@@ -57,6 +58,43 @@ def convert_txp(pw):
     out += bytes(new_data - len(out))
     out += pw[data:]
     return bytes(out)
+
+
+def texture_names(txp):
+    _, _, _, _, textures, table, _, _ = struct.unpack_from('<8I', txp)
+    return [struct.unpack_from('<I', txp, table + 0x30 * i + 4)[0] for i in range(textures)]
+
+
+def rename_textures(txp, mdp, mapping):
+    """Rename textures in a PO-layout TXP and the one material reference to
+    each in its MDP. PW scopes a model's texture names to its own pack (MDP
+    +0x10 names it); PO looks names up in one table, so a later pack reusing a
+    name would replace the earlier pack's texture."""
+    txp, mdp = bytearray(txp), bytearray(mdp)
+    _, _, _, _, textures, table, _, _ = struct.unpack_from('<8I', txp)
+    for i in range(textures):
+        at = table + 0x30 * i + 4
+        old = struct.unpack_from('<I', txp, at)[0]
+        if old not in mapping:
+            continue
+        struct.pack_into('<I', txp, at, mapping[old])
+        refs = [o for o in range(0, len(mdp) - 3, 4) if struct.unpack_from('<I', mdp, o)[0] == old]
+        if len(refs) != 1:
+            raise ValueError(f'texture {old:#x}: {len(refs)} model references, expected one')
+        struct.pack_into('<I', mdp, refs[0], mapping[old])
+    return bytes(txp), bytes(mdp)
+
+
+def renumber_bank(sep, bank):
+    """A sound bank (SP + id, ..., EP + id at its declared size) as bank id
+    `bank`. PO's SHDS table gives bank 0x31 (segrp_75) one sound, id 0x271."""
+    size = struct.unpack_from('<I', sep, 4)[0]
+    if sep[:2] != b'SP' or size > len(sep) or sep[size - 4:size - 2] != b'EP':
+        raise ValueError('not a sound bank')
+    sep = bytearray(sep)
+    struct.pack_into('<H', sep, 2, bank)
+    struct.pack_into('<H', sep, size - 2, bank)
+    return bytes(sep)
 
 
 def unpack(data):
@@ -131,15 +169,44 @@ def main():
         return
     if not all((args.stages, args.assets, args.output)):
         parser.error('provide STAGES ASSETS OUTPUT or --self-test')
+    models = ('fult_item_balloon', 'fult_item_body')  # balloon; harness and tie
     donors = {name: (args.assets / name).read_bytes() for name in (
-        'fult_item_balloon.txp', 'fult_item_balloon.mdp')}
-    if donors['fult_item_balloon.mdp'][:4] != b'MDP ':
-        parser.error('balloon must be the PSP MDP donor')
-    # PO's .txp loader expects its own layout; PW's crashes it (pointers
-    # relocated twice). Convert unless the file is already PO layout.
-    if struct.unpack_from('<I', donors['fult_item_balloon.txp'], 4)[0] != 1:
-        donors['fult_item_balloon.txp'] = convert_txp(donors['fult_item_balloon.txp'])
+        *(m + ext for m in models for ext in ('.mdp', '.txp')), 'fult_enemy.mtar')}
+    for model in models:
+        if donors[model + '.mdp'][:4] != b'MDP ':
+            parser.error(f'{model} must be the PSP MDP donor')
+        # PO's .txp loader expects its own layout; PW's crashes it (pointers
+        # relocated twice). Convert unless the file is already PO layout.
+        if struct.unpack_from('<I', donors[model + '.txp'], 4)[0] != 1:
+            donors[model + '.txp'] = convert_txp(donors[model + '.txp'])
+    # Later packs give up names an earlier one already uses (the harness
+    # reuses two of the balloon's names for different images).
+    taken = set()
+    for model in models:
+        names = texture_names(donors[model + '.txp'])
+        mapping = {}
+        for name in names:
+            if name in taken:
+                new = name
+                while new in taken or new in names:
+                    new = (new + 0x10000) & 0xffffff
+                mapping[name] = new
+            taken.add(mapping.get(name, name))
+        if mapping:
+            donors[model + '.txp'], donors[model + '.mdp'] = rename_textures(
+                donors[model + '.txp'], donors[model + '.mdp'], mapping)
+            print(model + ':', ', '.join(f'texture {a:#x} -> {b:#x}' for a, b in mapping.items()))
+    # Texture packs first: a model binds the pack its header names (MDP +0x10)
+    # when it loads, so a pack added after its model leaves it untextured.
+    donors = {name: donors[name] for name in sorted(donors, key=lambda n: not n.endswith('.txp'))}
+    if struct.unpack_from('<3I', donors['fult_enemy.mtar']) != (0x7261744d, 19, 2):
+        parser.error('fult_enemy.mtar must be PO-format (tools/portable-ops/mtar.py, enedam clips 101 103)')
     args.output.mkdir(parents=True, exist_ok=True)
+    # The Fulton sound bank is filed by the host from memory, not from a stage.
+    sound = args.assets / 'segrp_75_furuton.sep'
+    if sound.exists():
+        (args.output / 'fulton.sep').write_bytes(renumber_bank(sound.read_bytes(), 0x31))
+        print('fulton.sep: PW segrp_75_furuton as bank 0x31')
     rows = []
     for folder in sorted(args.stages.iterdir()):
         if not folder.is_dir() or (args.stage and folder.name not in args.stage):

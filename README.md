@@ -145,16 +145,23 @@ out/test-fulton
 
 ### Developer visual experiment
 
-`MGSPO_FULTON_VISUALS=1` adds the PW PSP balloon model. Snake attaches it with
-PO's own crouch-and-place clip (the TNT/claymore/magazine one: clip `0x25` of
-`sna_wp_claymore`), then the balloon inflates and rises. Both checked live.
-The soldier still vanishes without a lift animation. Failed or interrupted
-attachment cancels capture and leaves the soldier present.
+`MGSPO_FULTON_VISUALS=1` adds PW PSP donors to prepared stages. Snake
+attaches the device with PO's own crouch-and-place clip (clip `0x25` of
+`sna_wp_claymore`); the harness (`fult_item_body`) and the balloon ride the
+soldier's upper spine (bone 2; `MGSPO_FULTON_HARNESS_Y` and
+`MGSPO_FULTON_BALLOON_Y` set their heights above it); the soldier plays PW's
+lift clips (`enedam` 101 then 103, converted by the metal-gear `mtar.py` into
+`fult_enemy.mtar`) and is captured on the last frame. Afterwards Snake gets
+back the engine's last own motion requests. Failed or interrupted attachment
+cancels capture and leaves the soldier present. The Fulton sound
+(`fulton.sep`, PW's `segrp_75_furuton` as PO bank `0x31`) is filed per stage
+but does not play yet.
 
-Provide a local asset directory containing `fult_item_balloon.mdp` and
-`fult_item_balloon.txp` from PW PSP. PO's texture loader expects its own
-layout, so the script converts the TXP. Prepare selected stages from an
-extracted PO disc:
+Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
+`fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
+`segrp_75_furuton.sep`. The script converts the TXPs to PO's layout, renames
+textures the two packs share, puts the packs before the models, and
+renumbers the sound bank. Prepare selected stages from an extracted PO disc:
 
 ```sh
 python3 scripts/prepare-fulton-assets.py STAGE_DIRECTORY ASSET_DIRECTORY OUTPUT \
