@@ -1,0 +1,211 @@
+# Remaining feature work: static findings
+
+This pass uses framework baseline `699404d` and PO ULUS-10202 1.02's
+decrypted executable, SHA-256
+`ca700ea516a98949763410da537a75a08f9723718fab302bcd7ef1e6185cadf8`.
+Guest addresses equal ELF addresses plus `0x08804000`. PO+ needs its own
+verified addresses; the existing profile already separates its regions.
+Static candidates below are not live-confirmed feature hooks.
+
+## 1. Rumble
+
+The renderer already exposes its selected controller through
+`VulkanRenderer::gamepad()`. Controller lifetime is owned by its open/close
+and hot-plug paths in
+[`vulkan_renderer.cpp`](../portablekit/host/gpu/vulkan_renderer.cpp).
+There is no existing rumble event mapping in the profile.
+
+The engine's action setter is a useful RE starting point: PO ELF `0xCB58C`,
+with actor index in `a0` and action numbers through `t3`, terminated by -1.
+The local actor must be identified through the actor table, not assumed to
+have index zero. Its 793 direct engine call candidates include 733 with a
+locally constant first action number. The build-aware action scanner is
+documented in [engine feature hooks](../../docs/portable-ops/feature-hooks.md).
+It includes delay-slot arguments and leaves uncertain registers unknown.
+Sampled caller bodies contain repeated state and motion requests as well as
+transitions. Their frequency alone does not distinguish a confirmed shot
+from holding an aim or firing state; live event correlation is still needed.
+
+Next static step: classify the containing functions for damage application,
+projectile creation and CQC transitions. A flag set each frame is not a new
+event each frame; a firing flag alone can also miss individual automatic
+shots. Device output should follow confirmed event boundaries, stop when
+paused/disconnected, and remain optional. Motor strength still needs a
+controller check.
+
+## 2. Controller prompts
+
+Framework menu hints already select controller labels using
+`SDL_GetGamepadType` in
+[`widgets.cpp`](../portablekit/host/ui/widgets.cpp). The remaining item is
+the game's own prompt textures. Existing texture-pack replacement and dump
+paths can supply replacements once the atlas and rectangles are identified.
+
+A scan of the named PO stage archives found layout candidates such as
+`lay_codecicon.la2`, `lay_itemlist.la2`, `lay_property.la2` and
+`lay_bottommenu.la2`. It did not establish a dedicated button texture pack;
+hashed archives and shared atlases remain to resolve. A global atlas swap
+could replace text or unrelated icons alongside the buttons. Next step:
+resolve layout texture hashes and UV rectangles, then associate replacement
+images with the selected controller without reloading an entire HD pack.
+
+## 4. Cutscene and codec skipping
+
+[`fast_loading.hpp`](../portablekit/host/kernel/fast_loading.hpp) explicitly
+blocks acceleration while buttons are held, movies play, audio is audible,
+menus are open or ad hoc play is active. Reusing this detector unchanged
+cannot provide hold-to-skip. Existing Unlimited game speed is broader than
+a cutscene skip and is not a safe scene classifier.
+
+A native skip must use the engine's completion/cleanup path. Fast-forward
+would instead need an explicit scene classifier, timing override and audio
+policy, with prior speed restored on release or scene transition. PMF
+playback is only one case: in-engine cutscenes and codec conversations need
+their own state identification. No verified universal skip flag was found.
+
+## 6. Save states and quick resume
+
+Guest RAM alone omits state that affects the next instruction or frame:
+
+- [`Kernel`](../portablekit/host/kernel/kernel.hpp): thread contexts, waits,
+  semaphores, callbacks, virtual time and pending guest calls. Guest-return
+  and host-wait callbacks contain `std::function` closures; these cannot be
+  persisted as raw object bytes.
+- [`hle_io.cpp`](../portablekit/host/hle/hle_io.cpp): open descriptor IDs,
+  paths, positions, directories, async completion and file filters. Host
+  `fstream` and shared filter objects need explicit reconstruction.
+- [`SasCore`](../portablekit/host/audio/sas_core.hpp): voice decoder history,
+  playback position and envelopes. ATRAC and AVC decoders also own opaque
+  FFmpeg state; queued host audio must not survive a restore unchanged.
+- Renderer: GE state, render targets/depth, write-back ownership, textures
+  and in-flight fences. Current screenshot capture is not a renderer state
+  snapshot. Interpolation history must be invalidated on restore.
+- Runtime/profile: loaded modules, heap ownership, hook-owned state and
+  pending continuations. An outer dispatcher boundary removes the native
+  stack problem but does not serialize callback closures.
+
+First implementation should be a versioned offline snapshot at a supported
+quiescent boundary, with explicit subsystem capture/restore. Active network
+sessions and in-flight file writes are unsuitable starting points. Rewind
+additionally needs a policy for disk and other external side effects; it
+does not become correct from a RAM ring buffer alone.
+
+## 7. MSAA and anisotropic filtering
+
+Already implemented: settings `video.msaa` / `video.anisotropy`, Video menu
+rows and renderer support. Both apply after restart. This entry was stale.
+
+## 8. HUD scaling and safe areas
+
+The framework's Android safe-area/content rectangle handles the whole
+picture; it is not independent game-HUD scaling. PO's prior live trace
+classified the item HUD as through-mode sprites.
+
+The draw path already expands sprites into `GpuVertex` positions before
+upload. That is a possible adjustment boundary, but through-mode also
+contains full-screen backgrounds, fades and render-to-texture work. Scaling
+all through-mode vertices would change more than the HUD. Identify HUD
+layout/atlas classes first; transform their positions, anchoring and scissor
+rectangles together, preserving UVs and the 3D viewport. Game-specific
+classification belongs in the profile.
+
+## 10. Rich presence
+
+Existing ad hoc diagnostics expose group, nickname and connection state:
+[`client.hpp`](../portablekit/host/adhoc/client.hpp) and
+[`session.hpp`](../portablekit/host/adhoc/session.hpp). These can describe
+network activity without guessing it from arbitrary RAM.
+
+The stage module's shared name is `mgp_stage`; module-name callbacks alone
+cannot distinguish stages. A stage asset path or a verified engine stage ID
+must supply that identity. Existing file-open wrappers demonstrate an
+observation boundary; a presence observer must chain the previous handler
+and preserve any installed Fulton file filter.
+
+Separate a small, local state provider from any optional Discord transport.
+Human mission names, mission completion and application integration still
+need configuration/mapping.
+
+## 12. Draw distance, shadows and LOD
+
+Static view findings are in
+[engine feature hooks](../../docs/portable-ops/feature-hooks.md#view-limits).
+PO setter `0x40FBC` stores near/far distances in view `+0x1C0/+0x1C4`;
+initializer `0x41510` supplies 300/150000 units. The main projection and clip
+planes use those values. Another projection at view `+0x360` uses near
+distance `+0x3A0` (default 50) and a separate far constant (150000). Rigid
+and skinned objects with flag `0x80000` at `+0x5C` use this alternate
+projection, so one field cannot describe all passes.
+
+Current model traces already observe model pointers, part masks and flags
+with camera distance. A conservative experiment would modify the main
+view's far limit around the builder, then restore the source field, as the
+FOV hook restores its temporary changes. Scene visibility lists, LOD
+selection, fog and shadows remain separate controls. Renderer `NO_CULL`
+only disables GPU back-face culling; it cannot restore objects the engine
+never submitted. Shadow improvement also needs to distinguish shadow
+geometry/projection from texture resolution before choosing a control.
+
+## 13. Achievements
+
+PO GCL has global and link storage plus a variable assignment boundary at
+ELF `0x3EEA8`. Offsets need semantic identification before they can become
+unlock conditions. Known recruitment evidence is stronger: permanent roster
+insertion is `0x2EA70`; pending append `0x35D88` can be rejected or discarded
+before admission, so it must not award permanent-recruit achievements.
+
+Use confirmed game events and read-only state checks. Loading an old save
+must initialize the observation baseline rather than emit every existing
+flag as a new event. Achievement definitions, persistence and remaining
+mission/unlock flags still need work.
+
+## 14. Through-mode interpolation
+
+[`mark_eligible`](../portablekit/host/gpu/frame_interpolation.cpp) requires
+perspective, or orthographic plus transformed vertices. Through-mode draws
+fail both. The replay path iterates older-frame groups and ordinarily
+replays unmatched HUD groups unchanged. `GpuVertex::w` and normal fields
+also carry sprite UV-clamp bounds; blending the entire vertex structure
+would corrupt texture sampling.
+
+The static implementation boundary is explicit: classify displayed-target,
+non-clear through draws; retain decoded positions; match compatible groups;
+blend x/y in replay scratch storage. Match guards must include topology,
+UVs, texture identity and scissor, not only recycled guest vertex addresses.
+Reject ambiguous or discontinuous pairs and preserve draw order, depth and
+off-screen render targets. Newly appearing glyphs should not slide from a
+previous glyph's position. This needs a new vertex path, not the existing
+orthographic option. A separate newest-HUD compositing experiment could
+reduce UI delay, but cannot reorder arbitrary screen-space effects safely.
+
+## 15. Interpolation latency
+
+[`analyze-presentation-delay.cpp`](../scripts/analyze-presentation-delay.cpp)
+drives the existing `PresentClock` with deterministic 30 and 20 fps source
+cadences, 3 ms of work and the clock's existing work margin. It needs no
+window, game, GPU or sleep:
+
+```sh
+c++ -std=c++20 -Iportablekit/host scripts/analyze-presentation-delay.cpp \
+    portablekit/host/gpu/frame_pacing.cpp -o out/analyze-presentation-delay
+out/analyze-presentation-delay
+```
+
+| Source cadence | Presents | Buffer | Work allowance | Total modelled delay |
+| --- | --- | ---: | ---: | ---: |
+| 30 fps | 60 fps | 16.683 ms | 4 ms | 20.683 ms |
+| 30 fps | 144 fps | 31.976 ms | 4 ms | 35.976 ms |
+| 20 fps | 60 fps | 33.366 ms | 4 ms | 37.366 ms |
+| 20 fps | 144 fps | 48.659 ms | 4 ms | 52.659 ms |
+
+Interpolation off bypasses the present clock. These are model results,
+not physical button-to-screen measurements. The existing live comparison
+found similar mapped-button-to-motion timing with interpolation on/off.
+
+The grid delay is `frame_us - first_step_us + work_us`: at fractional
+present/source ratios the smallest grid step can be very short, forcing
+nearly a full source-frame delay. Reducing the work allowance alone cannot
+remove that term. A 60 fps cap is an existing lower-delay comparison at both
+source cadences. Further work must choose a tradeoff: less uniform pacing,
+newest-frame/UI presentation, or extrapolation with additional artifact
+guards. No default pacing policy was changed by this static pass.
