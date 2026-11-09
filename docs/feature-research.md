@@ -242,6 +242,12 @@ them. Native copy paths and initializers independently establish the bank
 spans. Flag semantics still need stronger script/control-flow evidence or
 live correlation.
 
+The disk save path is in the `title`/`briefing`/`ending` stage modules: a
+GCL-driven savedata actor saves a `0xA610`-byte buffer, the size of the two
+snapshot banks plus 4 bytes. If confirmed, achievements can be driven from
+snapshot diffs at `0x3E73C` (the copy made before a save) instead of every
+assignment. See [disk save](../../docs/portable-ops/gcl.md#disk-save).
+
 ## 14. Through-mode interpolation
 
 [`mark_eligible`](../portablekit/host/gpu/frame_interpolation.cpp) requires
