@@ -53,7 +53,7 @@ inline const Anchor *anchor_for(std::uint32_t key) {
 
 inline void remember(psprecomp::Runtime &rt, std::uint32_t key, std::uint32_t object) {
     const Anchor *anchor = anchor_for(key);
-    if (anchor == nullptr || object == 0) return;
+    if (anchor == nullptr || object < 0x08800000u || object >= 0x0A000000u - 0x120u) return;
     const std::uint32_t file = rt.memory().load32(object + 0x10u);
     std::erase_if(layouts, [&](const Layout &l) { return l.object == object; });
     layouts.push_back({object, file, *anchor});
@@ -61,8 +61,9 @@ inline void remember(psprecomp::Runtime &rt, std::uint32_t key, std::uint32_t ob
 
 // Handle low word is the actor's address / 16 (0xAA338 checks actor +0x18).
 inline void remember_actor(psprecomp::Runtime &rt, std::uint32_t key, std::uint32_t handle) {
-    if (handle == 0) return;
+    // A failed call leaves other values in v0; only user RAM can be an actor.
     const std::uint32_t actor = handle << 4u;
+    if (actor < 0x08800000u || actor >= 0x0A000000u - 0x100u) return;
     if (rt.memory().load32(actor + 0x18u) != handle) return;
     remember(rt, key, rt.memory().load32(actor + 0x40u));
 }
