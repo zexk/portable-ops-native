@@ -313,3 +313,33 @@ remove that term. A 60 fps cap is an existing lower-delay comparison at both
 source cadences. Further work must choose a tradeoff: less uniform pacing,
 newest-frame/UI presentation, or extrapolation with additional artifact
 guards. No default pacing policy was changed by this static pass.
+
+
+**Cause.** Interpolating to a grid moment needs the frame after it, so each
+present waits `frame - first step + code time`, where the first step is the
+smallest offset of a grid moment into its frame. That is at least half a
+frame (60) and grows with the rate: at a display reporting 143.98 Hz the grid
+never quite repeats against 30 fps frames, the first step falls to tens of
+microseconds and the wait is a whole game frame, about 33 ms on top of the
+code time, against none without interpolation.
+
+**Prediction** (PortableKit `PresentClock::set_lead`, Video > Prediction,
+`video.interpolation_lead`): presents come up to that fraction of the wait
+earlier, and grid moments whose next frame is not there yet are shown by
+carrying the newest frame on (blend factor above 1): the newer frame is
+replayed with each matched draw continued from its older partner along the
+same blends, unmatched draws follow the camera, flipbooks hold the newer
+cell. Each present still shows its own grid moment, so pacing stays even;
+the cost is a brief overshoot when motion stops or turns. The lead is taken
+out to the next grid offset that needs the next frame, so at 60 any lead
+removes the whole wait. Model (3 ms code, 1 ms margin), total delay:
+
+| Present rate | Lead 0 | Lead 50% | Lead 100% |
+| --- | ---: | ---: | ---: |
+| 60 | 20.7 ms | 4.0 ms | 4.0 ms |
+| 120 | 29.0 ms | 12.3 ms | 4.0 ms |
+| 143.98 | 37.3 ms | 20.7 ms | 4.0 ms |
+
+`CHECK_REPLAY` now also replays the newer frame through the carrying path at
+a factor just above 1 and counts pixels differing from its own picture.
+Not yet verified live or for physical button-to-screen latency.
