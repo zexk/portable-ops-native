@@ -54,6 +54,12 @@ in the user's data directory when the program is replaced. For a portable
 copy, create a folder named `portable` beside the executable: data, saves
 and settings then live there instead (on any system but Android).
 
+Press **F12** to save a PNG of the presented window at its full resolution,
+including the interface, in `screenshots/` inside the data folder. Each press
+uses a new filename. **Video > Field of view** adjusts the 3D view live from
+75% to 150%; 100% is the original view. Relative aim zoom and interface size
+are preserved. The setting is saved; `MGSPO_FOV=125` overrides it for one run.
+
 ## Local Windows packages
 
 Windows x64 preparation covers both editions. Follow

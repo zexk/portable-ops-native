@@ -137,6 +137,7 @@ const GameProfile &game() {
         .module_code_ready = &module_code_ready,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
+        .adjustable_fov = true,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         .system_language = kRelease.system_language,

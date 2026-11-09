@@ -12,8 +12,11 @@
 // for a narrower picture a shorter focal length, around the call: what is
 // drawn and what is culled both widen. Only full-screen views (480x272) are
 // reshaped; the focal length the game reads back is left as it set it.
+// The player's FOV percentage scales view width and height without changing
+// relative aim zoom or the interface. 100% leaves the original view intact.
 
 #include "psprecomp/runtime.hpp"
+#include "settings/settings.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -40,7 +43,9 @@ inline void build_view(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext 
     const std::uint32_t view = ctx.gpr[4];
     constexpr float kPspAspect = 480.0f / 272.0f;
     const float aspect = widescreen_state.aspect;
-    if (aspect == kPspAspect || memory.load32(view + 0x1b0u) != 480u || memory.load32(view + 0x1b4u) != 272u) {
+    const float fov = static_cast<float>(portablekit::settings::current().fov_percent) / 100.0f;
+    if ((aspect == kPspAspect && fov == 1.0f) ||
+        memory.load32(view + 0x1b0u) != 480u || memory.load32(view + 0x1b4u) != 272u) {
         widescreen_state.build_view(rt, ctx);
         return;
     }
@@ -50,7 +55,7 @@ inline void build_view(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext 
     const std::uint32_t one = memory.load32(k);
     const float focal = ctx.fpr[12];
     memory.store32(k, std::bit_cast<std::uint32_t>(std::bit_cast<float>(one) * kPspAspect / aspect));
-    ctx.fpr[12] = focal * std::min(1.0f, aspect / kPspAspect);
+    ctx.fpr[12] = focal * std::min(1.0f, aspect / kPspAspect) / fov;
     widescreen_state.build_view(rt, ctx);
     memory.store32(k, one);
     memory.store32(view + 0x1c8u, std::bit_cast<std::uint32_t>(focal));

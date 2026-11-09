@@ -88,6 +88,7 @@ const GameProfile &game() {
         .module_code_ready = &mgs::fulton::module_ready,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
+        .adjustable_fov = true,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         // North American console, English. The game confirms with circle
