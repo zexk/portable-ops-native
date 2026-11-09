@@ -83,8 +83,8 @@ Portable Ops+ is the same with `pop`, `PortableOpsPlusNative` and
 ## Game modules and stages
 
 The games load their own modules (sound, file system, zlib) and one stage
-module at a time from the disc. Each runs under the interpreter until it has
-recompiled code of its own.
+module at a time from the disc. Each needs recompiled code for every image it runs. Unknown images fall
+back to the interpreter.
 
 Stages are made straight from the disc: `stage-images.py` loads each stage
 as the engine does, linking it to the engine with the relocations in the
@@ -104,10 +104,16 @@ MGSPO_DUMP_MODULES=$PWD/out/module-dumps out/po/bin/PortableOpsNative
 nix develop --command python3 scripts/add-modules.py po out/module-dumps
 ```
 
-A module is identified by its code as it is in memory when it first runs after
-the game has patched it. A stage also runs for a moment before that, which
-`add-modules.py` leaves to the interpreter. Stages of one map (`trneko0800`,
-`0801`, `0802`) differ in a few units only, so `add-modules.py` moves each
+A module is identified by its code in memory at first entry and again after
+an instruction-cache flush. `stage-images.py` writes both the PRX-relocated
+startup image and the image after engine linking, with a `.entry` sidecar
+for `module_start`. `add-modules.py` compiles both. The runtime matches the
+startup corpus before `module_start`, then drops it when the game flushes
+its instruction cache after linking and matches the linked corpus on its
+next call. Regenerate stage images to add startup corpora to an existing
+build.
+
+Stages of one map (`trneko0800`, `0801`, `0802`) differ in a few units only, so `add-modules.py` moves each
 unit to `profiles/<edition>/units/`, named by its code, and the build compiles
 it once for all the stages that share it. Import stubs inside a module's code
 (`KCEJ_FS` has three) are dumped beside it as a `.stubs` file and kept out of

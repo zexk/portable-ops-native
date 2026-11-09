@@ -6,10 +6,9 @@ usage: scripts/stage-images.py po|pop|pop-eu|pop-jp DISC OUT_DIR
 The engine loads a stage PRX, starts it, then links it to itself with the
 stage's .rlc file (from its _zar archive): offsets into the engine's text and
 data, relocated by the engine's own loader (PO 0x1E04 stores the table, 0x1C0C
-applies it) with the same entry format as a PRX's relocations. Doing both
-here gives, for every stage on the disc, the code the port identifies a stage
-by, written as OUT_DIR/mod<BASE>_mgp_stage_<HASH>.bin like a dump, without
-playing to it. Then: scripts/add-modules.py <edition> OUT_DIR
+applies it) with the same entry format as a PRX's relocations. Both startup
+and linked code are written as OUT_DIR/mod<BASE>_mgp_stage_<HASH>.bin, with
+module_start in a .entry sidecar, without playing to the stage. Then: scripts/add-modules.py <edition> OUT_DIR
 """
 import pathlib
 import struct
@@ -103,8 +102,8 @@ def relocate(memory, entries, patch_bases, target_bases, engine):
         struct.pack_into('<I', memory, where, op)
 
 
-def stage_code(prx, rlc, edition):
-    """The stage's code once loaded at its base and linked to the engine."""
+def stage_code(prx, rlc, edition, *, linked=True):
+    """The stage code after PRX relocation, optionally linked to the engine."""
     shoff, = struct.unpack_from('<I', prx, 0x20)
     phoff, = struct.unpack_from('<I', prx, 0x1C)
     phnum, shnum, shstrndx = struct.unpack_from('<HxxHH', prx, 0x2C)
@@ -126,7 +125,8 @@ def stage_code(prx, rlc, edition):
         if section[1] == 0x700000A0:
             entries = list(struct.iter_unpack('<II', prx[section[4]:section[4] + section[5]]))
             relocate(memory, entries, bases, bases, False)
-    relocate(memory, list(struct.iter_unpack('<II', rlc[:len(rlc) & ~7])), bases, EDITIONS[edition]['engine'], True)
+    if linked:
+        relocate(memory, list(struct.iter_unpack('<II', rlc[:len(rlc) & ~7])), bases, EDITIONS[edition]['engine'], True)
     by_name = {name(section): section for section in sections}
     # The port's code: the first segment, up to the import stubs.
     end = min(loads[0][5], by_name['.sceStub.text'][3] if '.sceStub.text' in by_name else loads[0][5])
@@ -163,10 +163,15 @@ def main():
     for stage in stages:
         folder = '/psp_game/usrdir/stage/%s/' % stage
         rlc = zar_files(read(folder + '_zar')).get(stage + '.rlc', b'')
-        code = stage_code(read(folder + stage + '.prx'), rlc, edition)
-        path = out / ('mod%08X_mgp_stage_%016X.bin' % (EDITIONS[edition]['stage'], fnv1a64(code)))
-        path.write_bytes(code)
-        print('%s: %s' % (stage, path.name))
+        prx = read(folder + stage + '.prx')
+        for linked in (False, True):
+            code = stage_code(prx, rlc, edition, linked=linked)
+            path = out / ('mod%08X_mgp_stage_%016X.bin' % (EDITIONS[edition]['stage'], fnv1a64(code)))
+            path.write_bytes(code)
+            # module_start need not have a prologue the analyzer recognises.
+            entry = EDITIONS[edition]['stage'] + struct.unpack_from('<I', prx, 0x18)[0]
+            path.with_suffix('.entry').write_text('0x%08X\n' % entry)
+            print('%s (%s): %s' % (stage, 'linked' if linked else 'startup', path.name))
 
 
 if __name__ == '__main__':

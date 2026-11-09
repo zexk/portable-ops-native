@@ -16,8 +16,6 @@ runs. Then rebuild: cmake -S . -B out/<edition> && cmake --build out/<edition>.
 import hashlib
 import pathlib
 import re
-import shutil
-import struct
 import subprocess
 import sys
 
@@ -25,19 +23,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Modules left to the interpreter.
 SKIP = set()
 NAME = re.compile(r'^mod([0-9A-F]{8})_(.+)_([0-9A-F]{16})$')
-# A call below user memory, as recompiled code makes it (a jump there, without
-# a return, is data the recompiler decoded as code).
-LOW_CALL = re.compile(r'ctx\.pc = 0x0[0-7][0-9A-F]{6}u;\n *if \(rt\.invoke_chained_call')
-
-
-def unpatched(name, data):
-    """A stage first runs before the engine has patched its jumps into the
-    engine, which point below user memory until then, and is identified again
-    once patched, about a millisecond later. Only the patched code is worth
-    compiling."""
-    return 'stage' in name and any(word >> 26 == 3 and (word & 0x3FFFFFF) << 2 < 0x08000000
-                                   for (word,) in struct.iter_unpack('<I', data[:len(data) & ~3]))
-
 
 def fnv1a64(data):
     value = 0xCBF29CE484222325
@@ -60,9 +45,6 @@ def main():
             continue
         data = dump.read_bytes()
         assert fnv1a64(data) == digest, '%s: hash does not match its name' % dump.name
-        if unpatched(name, data):
-            print('%s: stage before its patch, skipped' % dump.name)
-            continue
         prefix = re.sub(r'\W', '_', dump.stem)
         target = overlays / prefix
         if (target / 'meta.txt').exists():
@@ -77,6 +59,9 @@ def main():
             for line in stubs.read_text().split():
                 start, end = (int(text, 16) for text in line.split('-'))
                 exclude += ['--exclude', '0x%X-0x%X' % (start, end)]
+        entry = dump.with_suffix('.entry')
+        if entry.exists():
+            exclude += ['--entry', entry.read_text().strip()]
         subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)] + exclude, check=True)
         # --compact: only the code the analysis reaches, entries only where
         # control arrives; the rest runs in the interpreter.
@@ -104,10 +89,6 @@ def pool_units(overlays):
     for module in sorted(path for path in overlays.iterdir() if (path / 'meta.txt').exists()):
         prefix = module.name
         units = sorted(module.glob('generated_unit_*.cpp'))
-        if 'stage' in prefix and any(LOW_CALL.search(unit.read_text()) for unit in units):
-            print('%s: stage before its patch, removed' % prefix)
-            shutil.rmtree(module)
-            continue
         listing = module / 'units.txt'
         names = listing.read_text().split() if listing.exists() else []
         renames = {}
