@@ -117,6 +117,15 @@ layout/atlas classes first; transform their positions, anchoring and scissor
 rectangles together, preserving UVs and the 3D viewport. Game-specific
 classification belongs in the profile.
 
+Follow-up static RE found PO's LA2 constructors and runtime node tables:
+layout objects are `0x120` bytes, node count is at `+0x54`, and the pointer
+table at `+0x60` uses indices starting at 1. The file-node parser now checks
+all 32,291 nodes in 311 layouts, including their parent references. Layout tuple/rectangle setters and dirty flags are located, but their full
+consumer-side transform behavior and live HUD ownership remain unverified.
+See [LA2 construction](../../docs/portable-ops/feature-hooks.md#la2-construction-and-node-records).
+This provides a narrower engine-level research path than changing every
+through-mode vertex; it does not yet establish that all HUD elements use LA2.
+
 ## 10. Rich presence
 
 Existing ad hoc diagnostics expose group, nickname and connection state:
