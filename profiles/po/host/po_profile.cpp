@@ -9,6 +9,7 @@
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
+#include "trace_models.hpp"
 #include "umd_key_table.hpp"
 #include "widescreen.hpp"
 
@@ -35,6 +36,8 @@ constexpr mgs::WidescreenAddresses kWidescreen{0x08804000u + 0x41124u, 0x0880400
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera(runtime, kCamera);
     mgs::install_camera_follow(runtime, kCameraSwing);
+    mgs::install_model_trace(runtime, 0x08804000u + 0x45EA4u, 0x08804000u + 0x45954u);
+    mgs::install_camera_trace(runtime, 0x08804000u + 0x10D304u);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
 }
