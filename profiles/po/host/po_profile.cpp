@@ -7,6 +7,7 @@
 #include "camera.hpp"
 #include "detail_distance.hpp"
 #include "fulton.hpp"
+#include "hud_scale.hpp"
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
@@ -45,6 +46,13 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);
+    mgs::hud_scale::install(runtime, 0x08804000u + 0xA9F18u, 0x08804000u + 0xAA008u, 0x08804000u + 0x196C70u);
+}
+
+// Once a frame: the view's shape, then the interface size.
+void frame(psprecomp::Runtime &runtime, float aspect) {
+    mgs::view_aspect_frame(runtime, aspect);
+    mgs::hud_scale::frame(runtime);
 }
 
 } // namespace
@@ -89,9 +97,10 @@ const GameProfile &game() {
         .patch_loaded_image = &patch_image,
         .module_code_ready = &mgs::fulton::module_ready,
         .camera = &mgs::kCameraDriver,
-        .view_aspect_frame = &mgs::view_aspect_frame,
+        .view_aspect_frame = &frame,
         .adjustable_fov = true,
         .adjustable_detail_distance = true,
+        .adjustable_hud_scale = true,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         // North American console, English. The game confirms with circle
