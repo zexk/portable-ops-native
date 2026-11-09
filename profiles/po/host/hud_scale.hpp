@@ -17,6 +17,7 @@
 // The character name beside the life gauge is drawn outside the layouts and
 // keeps its size.
 
+#include "guest_wrap.hpp"
 #include "psprecomp/runtime.hpp"
 #include "settings/settings.hpp"
 
@@ -43,7 +44,6 @@ struct Layout {
 };
 
 inline std::vector<Layout> layouts;
-inline psprecomp::Runtime::RecompiledFunction factory = nullptr, factory2 = nullptr, wrapper = nullptr;
 
 inline const Anchor *anchor_for(std::uint32_t key) {
     for (const Anchor &a : kAnchors)
@@ -69,22 +69,34 @@ inline void remember_actor(psprecomp::Runtime &rt, std::uint32_t key, std::uint3
     remember(rt, key, rt.memory().load32(actor + 0x40u));
 }
 
+inline GuestWrap factory, factory2, wrapper;
+
 inline void make_actor(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     const std::uint32_t key = ctx.gpr[4];
-    factory(rt, ctx);
-    remember_actor(static_cast<psprecomp::Runtime &>(rt), key, ctx.gpr[2]);
+    if (factory.inner || anchor_for(key) == nullptr) {
+        factory.inner = false;
+        factory.original(rt, ctx);
+        return;
+    }
+    factory.around(rt, ctx, [key](psprecomp::Runtime &r, std::uint32_t handle) { remember_actor(r, key, handle); });
 }
-
 inline void make_actor2(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     const std::uint32_t key = ctx.gpr[4];
-    factory2(rt, ctx);
-    remember_actor(static_cast<psprecomp::Runtime &>(rt), key, ctx.gpr[2]);
+    if (factory2.inner || anchor_for(key) == nullptr) {
+        factory2.inner = false;
+        factory2.original(rt, ctx);
+        return;
+    }
+    factory2.around(rt, ctx, [key](psprecomp::Runtime &r, std::uint32_t handle) { remember_actor(r, key, handle); });
 }
-
 inline void make_layout(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     const std::uint32_t key = ctx.gpr[4];
-    wrapper(rt, ctx);
-    remember(static_cast<psprecomp::Runtime &>(rt), key, ctx.gpr[2]);
+    if (wrapper.inner || anchor_for(key) == nullptr) {
+        wrapper.inner = false;
+        wrapper.original(rt, ctx);
+        return;
+    }
+    wrapper.around(rt, ctx, [key](psprecomp::Runtime &r, std::uint32_t object) { remember(r, key, object); });
 }
 
 inline void frame(psprecomp::Runtime &rt) {
@@ -105,19 +117,11 @@ inline void frame(psprecomp::Runtime &rt) {
     }
 }
 
-inline void wrap(psprecomp::Runtime &runtime, std::uint32_t address, psprecomp::Runtime::RecompiledFunction &slot,
-                 psprecomp::Runtime::RecompiledFunction hook, const char *name) {
-    const psprecomp::Runtime::RecompiledFunction found = runtime.registered_function(address);
-    if (found == nullptr || found == hook) return;
-    slot = found;
-    runtime.register_function(address, hook, name);
-}
-
 inline void install(psprecomp::Runtime &runtime, std::uint32_t make_actor_at, std::uint32_t make_actor2_at,
                     std::uint32_t make_layout_at) {
-    wrap(runtime, make_actor_at, factory, &make_actor, "mgs_hud_layout_actor");
-    wrap(runtime, make_actor2_at, factory2, &make_actor2, "mgs_hud_layout_actor2");
-    wrap(runtime, make_layout_at, wrapper, &make_layout, "mgs_hud_layout");
+    factory.install(runtime, make_actor_at, &make_actor, "mgs_hud_layout_actor");
+    factory2.install(runtime, make_actor2_at, &make_actor2, "mgs_hud_layout_actor2");
+    wrapper.install(runtime, make_layout_at, &make_layout, "mgs_hud_layout");
     std::cout << "[hud] interface layouts scaled" << std::endl;
 }
 
