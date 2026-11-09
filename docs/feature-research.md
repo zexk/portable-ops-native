@@ -35,6 +35,13 @@ controller check.
 
 ## 2. Controller prompts
 
+Premise unverified: no gameplay evidence yet establishes controller button
+glyphs in PO or its online mode. Inspected shared init fonts, codec icons,
+briefing bottom-menu images and one mission HUD pack show text and menu/HUD
+art, without identified controller glyphs. This does not prove their absence
+elsewhere. Confirm an actual prompt before pursuing controller replacements.
+The layout work remains relevant to HUD classification and scaling.
+
 Framework menu hints already select controller labels using
 `SDL_GetGamepadType` in
 [`widgets.cpp`](../portablekit/host/ui/widgets.cpp). The remaining item is
@@ -44,8 +51,8 @@ paths can supply replacements once the atlas and rectangles are identified.
 A scan of the named PO stage archives found layout candidates such as
 `lay_codecicon.la2`, `lay_itemlist.la2`, `lay_property.la2` and
 `lay_bottommenu.la2`. It did not establish a dedicated button texture pack;
-hashed archives and shared atlases remain to resolve. A global atlas swap
-could replace text or unrelated icons alongside the buttons.
+button artwork remains unidentified. A global atlas swap could replace text
+or unrelated icons alongside any buttons.
 
 Follow-up static pass resolved the container and texture-reference tables:
 all 5,138 references in 311 layouts across 100 PO stages match their QAR
@@ -54,22 +61,15 @@ resource name plus texture hash. The scanner and format are documented in
 Briefing bottom-menu and item-list resources are now located, including their
 texture records and UV words. Packed image descriptors are preserved rather
 than guessed as plain dimensions. Specific controller glyphs and layout
-node transforms remain unidentified. Next step: identify those rectangles,
-then select replacements without reloading an entire HD pack.
+node transforms remain unidentified. Replacement work is deferred until an
+actual gameplay prompt is confirmed.
 
-## 4. Cutscene and codec skipping
+## 4. Removed: cutscene and codec skipping
 
-[`fast_loading.hpp`](../portablekit/host/kernel/fast_loading.hpp) explicitly
-blocks acceleration while buttons are held, movies play, audio is audible,
-menus are open or ad hoc play is active. Reusing this detector unchanged
-cannot provide hold-to-skip. Existing Unlimited game speed is broader than
-a cutscene skip and is not a safe scene classifier.
-
-A native skip must use the engine's completion/cleanup path. Fast-forward
-would instead need an explicit scene classifier, timing override and audio
-policy, with prior speed restored on release or scene transition. PMF
-playback is only one case: in-engine cutscenes and codec conversations need
-their own state identification. No verified universal skip flag was found.
+The user reports that holding Triangle already provides the intended
+fast-forward behavior. No additional feature or static skip-path research
+is needed for this item. End-credit behavior is unverified and does not
+justify a separate feature without a concrete missing behavior.
 
 ## 6. Save states and quick resume
 
@@ -159,6 +159,15 @@ selection, fog and shadows remain separate controls. Renderer `NO_CULL`
 only disables GPU back-face culling; it cannot restore objects the engine
 never submitted. Shadow improvement also needs to distinguish shadow
 geometry/projection from texture resolution before choosing a control.
+
+Follow-up static RE mapped the rejection pipeline in
+[model rejection and part masks](../../docs/portable-ops/feature-hooks.md#model-rejection-and-part-masks).
+Object `+0x6E` receives an eight-corner clip result from `0x4A7C4`; result 2
+is rejected before draw. A separate visibility intersection uses object
+`+0x60` and view `+0x1E8`. Hidden-bone masks at `+0xF0/+0xF4` have named-bone
+set/clear helpers and hierarchy propagation, so globally clearing them is
+not a justified LOD override. Rigid parts also have separate clip results.
+No scalar distance-based LOD threshold has been verified in these paths.
 
 ## 13. Achievements
 
