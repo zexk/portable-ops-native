@@ -183,13 +183,21 @@ attachment and recruitment completed in PO live checks; balloon and both
 effects play, also after a stage reset. Prone soldiers held at gunpoint
 (hold-up flag `0x40`, motion state `0x152`) are eligible, confirmed in game;
 a rejected nearby soldier's flags and behavior are logged on a chord press.
-Soldier facing is aligned with Snake during attachment and lift, not yet
-confirmed in game. PW's attach-clip foley, soldier yank cries and
-voice-family selection remain separate work.
+Optional `fulton-foley.sep` adds the three confirmed attachment foleys at
+donor ticks 60, 175 and 280, plus the confirmed ordinary-soldier yank grunt
+at settle cursor 140. Build it with `fulton_sfx.py --foley` from four mono
+44.1 kHz 16-bit WAVs in that order. It uses private bank `0x144` and sound
+IDs `0xB9B` through `0xB9E`; the host extends the sound catalog while
+preserving existing entries. These four new cues need a live playback check.
+Other voice families and two remaining attachment cues remain unmapped.
+Current body placement snaps the soldier's yaw to Snake's. PW instead
+slides/turns the prone body into a T-shaped arrangement, perpendicular to
+player forward. Matching that placement remains pending.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
 `fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
-`segrp_75_furuton.sep`, `fult_place.mtar` and `fulton-lift.sep`. The optional
+`segrp_75_furuton.sep`, `fult_place.mtar`, `fulton-lift.sep` and
+`fulton-foley.sep`. The optional
 placement archive comes from metal-gear's `mtar.py`, `--clip 156` of PW's
 `snake_coop.mtar`; it loads through PO's resource handler once per stage,
 without increasing the fixed-size stage ZAR. The script converts the TXPs to PO's layout, renames

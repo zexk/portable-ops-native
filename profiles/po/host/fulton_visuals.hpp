@@ -80,9 +80,28 @@ struct State {
     std::optional<std::array<std::uint16_t, 2>> old_yaw;
     unsigned frames{}, phase_frames{};
     bool lift_released = false;
+    unsigned foley_played = 0;
     Finish finish;
 };
 inline State state;
+
+inline std::vector<std::uint32_t> extra_sounds(Phase phase, float cursor, float end,
+                                              bool pw_attach, unsigned &played) {
+    std::vector<std::uint32_t> sounds;
+    constexpr std::array<float, 3> ticks{60, 175, 280};
+    if (phase == Phase::Attaching && pw_attach && end > 0) {
+        const float tick = cursor / end * 375.0f; // snake_coop clip 156 sidecar
+        for (unsigned i = 0; i < ticks.size(); ++i)
+            if (!(played & (1u << i)) && tick >= ticks[i]) {
+                played |= 1u << i;
+                sounds.push_back(fulton_sound::kFoleySound + i);
+            }
+    } else if (phase == Phase::Settle && cursor >= 140 && !(played & 8u)) {
+        played |= 8u;
+        sounds.push_back(fulton_sound::kFoleySound + 3);
+    }
+    return sounds;
+}
 
 // PO control starts at enemy +0x20: current/target yaw at +0x42/+0x4A.
 // Match the player's current heading while attachment and lift own the pose.
@@ -393,12 +412,15 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     std::optional<std::uint32_t> next_clip;
     std::optional<std::uint32_t> lift_effect;
     bool hand_snake = false, sound = false;
+    std::vector<std::uint32_t> extra_effects;
     float scale = 1, harness_scale = 1, rise = 0;
     switch (state.phase) {
     case Phase::Attaching: {
         mgs::set_action(runtime, ctx, player, 0x13bu);
         const float frame = std::bit_cast<float>(memory.load32(state.snake.channel + 0x38u));
         const float end = std::bit_cast<float>(memory.load32(state.snake.channel + 0x30u));
+        extra_effects = extra_sounds(state.phase, frame, end, state.place_hash == kPWPlaceArchive,
+                                    state.foley_played);
         const float progress = end > 0 ? std::clamp(frame / end, 0.0f, 1.0f) : 0;
         scale = std::clamp((progress - 0.55f) * 3, 0.02f, 1.0f);
         harness_scale = progress > 0.4f ? 1.0f : 0.02f; // clipped on mid-placement
@@ -427,6 +449,7 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
         // routine takes the pose back (asleep on the floor) before cleanup.
         const float frame = std::bit_cast<float>(memory.load32(state.soldier.channel + 0x38u));
         const float end = std::bit_cast<float>(memory.load32(state.soldier.channel + 0x30u));
+        extra_effects = extra_sounds(state.phase, frame, end, false, state.foley_played);
         // PW enedam.mtsq clip 103 requests its extraction effect at tick 100
         // of 350. The live sample had advanced to 110 by the sound call.
         if (!state.lift_released && frame >= 100.0f) {
@@ -487,8 +510,11 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
         if (lift_effect) fulton_sound::play(memory, context, state.enemy + 0x30u, snake, fulton_sound::kLiftSound + *lift_effect);
         else snake(context);
     };
-    if (sound) fulton_sound::play(memory, ctx, state.enemy + 0x30u, effects);
-    else effects(ctx);
+    auto extras = [&memory, extra_effects, effects](Context &context) {
+        fulton_sound::sequence(memory, context, state.enemy + 0x30u, extra_effects, effects);
+    };
+    if (sound) fulton_sound::play(memory, ctx, state.enemy + 0x30u, extras);
+    else extras(ctx);
     return true;
 }
 

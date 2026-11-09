@@ -53,6 +53,72 @@ int main(int argc, char **argv) {
     assert((0x1c00u & chord) == chord); // Observed engine L + R + Triangle.
     assert((0x1300u & chord) != chord); // Raw sceCtrl mask is not the engine mask.
     Memory memory;
+    {
+        std::vector<std::uint8_t> bank(0x200);
+        auto put = [&](unsigned at, std::uint32_t value) { std::memcpy(bank.data() + at, &value, 4); };
+        put(0, 0x01445053); put(4, bank.size()); put(bank.size() - 4, 0x01445045);
+        put(8, 0x30); put(12, 0xb0); put(16, 0xd0); put(24, 0x180);
+        for (unsigned i = 0; i < 4; ++i) {
+            put(0x30 + i * 32 + 8, i * 8);
+            put(0xb0 + i * 8, i * 0x20);
+            put(0xd0 + i * 0x20, 16);
+        }
+        assert(mgs::fulton_sound::valid_foley(bank));
+        assert(!mgs::fulton_sound::valid_bank(bank, 0x44, 0x9000));
+        put(0xd0, 0xfffffff0);
+        assert(!mgs::fulton_sound::valid_foley(bank));
+        put(0xd0, 16); put(0xb4, 0xffffffff);
+        assert(!mgs::fulton_sound::valid_foley(bank));
+        put(0xb4, 0); put(0x38, 32);
+        assert(!mgs::fulton_sound::valid_foley(bank));
+    }
+    {
+        Memory source;
+        constexpr std::uint32_t at = 0x08810000u, destination = 0x09900000u;
+        constexpr unsigned old_sounds = 2971, old_banks = 324;
+        const std::array<unsigned, 4> sizes{old_sounds * 8, old_banks * 16, old_banks * 4, old_banks * 2};
+        source.store32(at, 0x53444853u);
+        source.store32(at + 0xc, 0x0a570029u);
+        source.store32(at + 0x10, 283);
+        unsigned offset = 0x34;
+        for (unsigned table = 0; table < sizes.size(); ++table) {
+            source.store32(at + 0x14 + table * 4, at + offset);
+            for (unsigned i = 0; i < sizes[table]; i += 4)
+                source.store32(at + offset + i, 0x12340000u + table * 0x10000u + i);
+            offset += sizes[table];
+        }
+        const auto extended = mgs::fulton_audio_catalog::extend(source, at, destination);
+        assert(!extended.empty() && extended.size() <= 0x8000);
+        auto word = [&](unsigned i) { std::uint32_t x; std::memcpy(&x, extended.data() + i, 4); return x; };
+        for (unsigned table = 0; table < sizes.size(); ++table) {
+            const auto old = source.load32(at + 0x14 + table * 4);
+            const auto now = word(0x14 + table * 4) - destination;
+            for (unsigned i = 0; i < sizes[table]; ++i)
+                assert(extended[now + i] == source.load8(old + i));
+        }
+        assert(word(0x10) == 284 && word(0xc) == 0x0a5a0029u);
+        const auto cues = word(0x14) - destination;
+        assert(word(cues + 2971 * 8) == 0x40010103u);
+        const auto banks = word(0x18) - destination;
+        assert(word(banks + 324 * 16) == 0 && word(banks + 324 * 16 + 8) == 0x9000);
+        const auto ids = word(0x20) - destination;
+        assert((extended[ids + 648] | extended[ids + 649] << 8) == 2971);
+        source.store32(at + 0x14, 0);
+        assert(mgs::fulton_audio_catalog::extend(source, at, destination).empty());
+        using mgs::fulton_visuals::Phase;
+        using mgs::fulton_visuals::extra_sounds;
+        unsigned played = 0;
+        assert(extra_sounds(Phase::Attaching, 0, 75, true, played).empty());
+        auto events = extra_sounds(Phase::Attaching, 35, 75, true, played);
+        assert(events == (std::vector<std::uint32_t>{2971, 2972}));
+        assert(extra_sounds(Phase::Attaching, 35, 75, true, played).empty());
+        assert(extra_sounds(Phase::Attaching, 56, 75, true, played) == (std::vector<std::uint32_t>{2973}));
+        assert(extra_sounds(Phase::Settle, 139, 350, false, played).empty());
+        assert(extra_sounds(Phase::Settle, 140, 350, false, played) == (std::vector<std::uint32_t>{2974}));
+        assert(extra_sounds(Phase::Settle, 141, 350, false, played).empty());
+        played = 0;
+        assert(extra_sounds(Phase::Attaching, 75, 75, false, played).empty());
+    }
     constexpr std::uint32_t player = 0x08a50000u, work = 0x09b10000u, component = 0x09b20000u;
     constexpr Target target{work, 0x15f7f777u};
     memory.words[work] = target.name;
@@ -192,7 +258,7 @@ int main(int argc, char **argv) {
     effect.returned(context, 1);
     assert(returned);
     mgs::fulton_sound::stage_changed();
-    assert(!mgs::fulton_sound::current && !mgs::fulton_sound::lift_current);
+    assert(!mgs::fulton_sound::current && !mgs::fulton_sound::lift_current && !mgs::fulton_sound::foley_current);
     returned = false;
     mgs::fulton_sound::play(memory, context, work + 0x30u, [&](auto &) { returned = true; }, 0x273u);
     assert(returned && guest_calls.empty()); // No stale stage bank may play.

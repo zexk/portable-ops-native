@@ -227,6 +227,14 @@ def main():
             parser.error('fulton-lift.sep must be PO bank 0x32 with two cues (tools/portable-ops/fulton_sfx.py)')
         (args.output / 'fulton-lift.sep').write_bytes(data)
         print('fulton-lift.sep: two common extraction effects as bank 0x32')
+    foley = args.assets / 'fulton-foley.sep'
+    if foley.exists():
+        data = foley.read_bytes()
+        if len(data) < 0xd0 or len(data) > 0x9000 or data[:4] != b'SP\x44\x01' or \
+                data[-4:] != b'EP\x44\x01' or struct.unpack_from('<4I', data, 4) != (len(data), 0x30, 0xb0, 0xd0):
+            parser.error('fulton-foley.sep must be private bank 0x144 with four cues (fulton_sfx.py --foley)')
+        (args.output / 'fulton-foley.sep').write_bytes(data)
+        print('fulton-foley.sep: three attachment effects and soldier grunt')
     rows = []
     for folder in sorted(args.stages.iterdir()):
         if not folder.is_dir() or (args.stage and folder.name not in args.stage):

@@ -25,6 +25,8 @@
 // makes it a 3D sound.
 
 #include "fulton_assets.hpp"
+#include "fulton_audio_catalog.hpp"
+#include "kernel/kernel.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -36,7 +38,11 @@ constexpr std::uint32_t base = 0x08804000u;
 constexpr std::uint32_t kHandler = base + 0xc918u, kRegister = base + 0x1c5bc0u, kActivate = base + 0x1c5b20u;
 constexpr std::uint32_t kAlloc = base + 0x3a478u, kPlay = base + 0xe540u;
 constexpr std::uint32_t kKey = 0x37000000u | 0x89cdf4u; // .sep, GV_StrCode("segrp_75_furuton")
-constexpr std::uint32_t kSound = 0x271u;
+constexpr std::uint32_t kSound = 0x271u, kSound2 = 0x08b10100u;
+constexpr std::uint32_t kFoleySound = fulton_audio_catalog::kFirstSound;
+constexpr std::uint32_t kFoleyKey = 0x37d1baeau; // fult_foley
+inline std::uint32_t catalog_address = 0;
+inline std::int32_t catalog_block = -1;
 // Two common extraction effects captured in PW MC as 0x9D3B/0x9D3C.
 // Bank 0x32 has two PO slots (0x272/0x273), 0x11000 bytes, and no stage loads it.
 constexpr std::uint32_t kLiftSound = 0x272u, kLiftKey = 0x37376f7du;
@@ -45,7 +51,8 @@ constexpr std::uint32_t kLiftSound = 0x272u, kLiftKey = 0x37376f7du;
 constexpr std::uint32_t kContext = base + 0x1eed40u + 0x7fad8u;
 
 inline std::vector<std::uint8_t> bank;
-inline std::vector<std::uint8_t> lift_bank;
+inline std::vector<std::uint8_t> lift_bank, foley_bank;
+inline bool foley_current = false;
 inline bool current = false; // filed since the last stage change
 inline bool lift_current = false;
 
@@ -61,7 +68,7 @@ std::uint32_t entry(const Memory &memory, const std::vector<std::uint8_t> &bytes
     return 0;
 }
 
-inline void stage_changed() { current = lift_current = false; }
+inline void stage_changed() { current = lift_current = foley_current = false; }
 
 // Files the bank for this stage if needed, then next.
 inline void prepare_bank(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
@@ -126,6 +133,36 @@ inline void prepare_bank(psprecomp::Runtime &runtime, psprecomp::AllegrexContext
 // bank id: data (0 = not playable), data, capacity, state byte at +0xC.
 constexpr std::uint32_t kShds = base + 0x1d779cu;
 
+// Keep the private catalogue outside the engine's stage-reset heaps.
+// Sound2 may be initialized again: then its original catalogue is authoritative.
+template<class Memory>
+std::uint32_t catalog(const Memory &memory) {
+    return catalog_address && memory.contains(kSound2 + 0x2d340u, 4) &&
+           memory.load32(kSound2 + 0x2d340u) == catalog_address ? catalog_address : kShds;
+}
+
+inline bool prepare_catalog(psprecomp::Runtime &runtime) {
+    auto &memory = runtime.memory();
+    if (catalog(memory) == catalog_address && catalog_address) return true;
+    if (!memory.contains(kSound2 + 0x2d364u, 4) || memory.load32(kSound2 + 0x2d340u) != kShds)
+        return false;
+    auto &kernel = portablekit::kernel();
+    auto block = kernel.find_block(catalog_block);
+    if (!block || block->name != "FultonAudioCatalog") {
+        catalog_block = kernel.allocate_block("FultonAudioCatalog", 1, 0x8000, 0);
+        block = kernel.find_block(catalog_block);
+    }
+    if (!block) return false;
+    auto bytes = fulton_audio_catalog::extend(memory, kShds, block->address);
+    if (bytes.empty() || bytes.size() > block->size) return false;
+    memory.copy_in(block->address, bytes);
+    catalog_address = block->address;
+    memory.store32(kSound2 + 0x2d35cu, fulton_audio_catalog::kFirstSound + fulton_audio_catalog::kSounds);
+    memory.store32(kSound2 + 0x2d360u, fulton_audio_catalog::kBank + 1);
+    memory.store32(kSound2 + 0x2d340u, catalog_address);
+    return true;
+}
+
 // The SHDS sound table (header +0x34, 8 bytes an id) types 0x272 as ATRAC3plus
 // (05 01 01 40 00 01 00 00) and 0x273 as an ADPCM effect (03 01 01 40 00 00 00
 // 00); sound2 0x5440 puts byte 0's low nibble into the play id. Type 5 effects
@@ -134,7 +171,9 @@ constexpr std::uint32_t kShds = base + 0x1d779cu;
 // and then failed ATRAC setup: neither played. No stock bank uses 0x272.
 template<class Memory>
 void retype_lift(Memory &memory) {
-    const auto to = kShds + 0x34u + kLiftSound * 8u;
+    const auto header = catalog(memory);
+    const auto cues = memory.load32(header + 0x14u);
+    const auto to = (cues ? cues : header + 0x34u) + kLiftSound * 8u;
     if (!memory.contains(to, 16u) || memory.load32(kShds) != 0x53444853u) return;
     memory.store32(to, memory.load32(to + 8u));
     memory.store32(to + 4u, memory.load32(to + 12u));
@@ -142,20 +181,31 @@ void retype_lift(Memory &memory) {
 
 inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
                     std::function<void(psprecomp::AllegrexContext &)> next) {
+    if (!foley_bank.empty() && !prepare_catalog(runtime)) {
+        foley_current = false;
+        std::cerr << "[fulton] private audio catalogue unavailable; extra cues disabled" << std::endl;
+    }
     if (!lift_bank.empty()) retype_lift(runtime.memory());
     prepare_bank(runtime, ctx, bank, current, kKey, 0x31u, [&runtime, next](auto &context) {
-        prepare_bank(runtime, context, lift_bank, lift_current, kLiftKey, 0x32u, next);
+        prepare_bank(runtime, context, lift_bank, lift_current, kLiftKey, 0x32u,
+            [&runtime, next](auto &loaded) {
+                if (foley_bank.empty() || catalog(runtime.memory()) != catalog_address || !catalog_address) {
+                    next(loaded); return;
+                }
+                prepare_bank(runtime, loaded, foley_bank, foley_current, kFoleyKey,
+                             fulton_audio_catalog::kBank, next);
+            });
     });
 }
 // sound2 0x2544 (play) leaves why it refused in this word: 1 bank not loaded,
 // 2 no voice, 4 already playing, 8 on-demand load failed. sound2 is loaded at
 // 0x08B10100 in this build; trusted only while its SHDS pointer matches.
-constexpr std::uint32_t kSound2 = 0x08b10100u;
+
 
 template<class Memory>
 std::uint32_t shds_entry(const Memory &memory, std::uint32_t id) {
     if (!memory.contains(kShds, 0x20u) || memory.load32(kShds) != 0x53444853u) return 0;
-    const auto at = memory.load32(kShds + 0x18u) + id * 16u;
+    const auto at = memory.load32(catalog(memory) + 0x18u) + id * 16u;
     return memory.contains(at, 16u) ? at : 0u;
 }
 
@@ -166,16 +216,17 @@ std::uint32_t shds_entry(const Memory &memory, std::uint32_t id) {
 template<class Memory, class Next>
 void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t position, Next next,
           std::uint32_t sound = kSound) {
-    if (!(sound == kSound ? current : lift_current)) { next(ctx); return; }
+    const bool foley = sound >= kFoleySound && sound < kFoleySound + fulton_audio_catalog::kSounds;
+    if (!(sound == kSound ? current : foley ? foley_current : lift_current)) { next(ctx); return; }
     if (portablekit::hle_extension::env("FULTON_SOUND_2D")) position = 0;
-    const std::uint32_t id = sound == kSound ? 0x31u : 0x32u;
-    const auto &bytes = sound == kSound ? bank : lift_bank;
+    const std::uint32_t id = sound == kSound ? 0x31u : foley ? fulton_audio_catalog::kBank : 0x32u;
+    const auto &bytes = sound == kSound ? bank : foley ? foley_bank : lift_bank;
     auto start = [&memory, position, next, sound, id](psprecomp::AllegrexContext &context) {
         portablekit::hle_extension::call_guest(context, kPlay, {sound, 0u, 0u, position},
             [&memory, next, sound, id](auto &played, std::uint32_t handle) {
                 if (!handle) {
                     std::cerr << std::hex << "[fulton] sound 0x" << sound << " refused";
-                    if (memory.contains(kSound2 + 0x2d340u, 4u) && memory.load32(kSound2 + 0x2d340u) == kShds)
+                    if (memory.contains(kSound2 + 0x2d340u, 4u) && memory.load32(kSound2 + 0x2d340u) == catalog(memory))
                         std::cerr << " (sound2 reason " << memory.load32(kSound2 + 0x2d2d4u) << ')';
                     if (const auto at = shds_entry(memory, id))
                         std::cerr << " bank 0x" << id << " data " << memory.load32(at) << " state "
@@ -185,7 +236,7 @@ void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t p
                 next(played);
             });
     };
-    const auto listed = bytes.empty() ? 0u : entry(memory, bytes, sound == kSound ? kKey : kLiftKey);
+    const auto listed = bytes.empty() ? 0u : entry(memory, bytes, sound == kSound ? kKey : foley ? kFoleyKey : kLiftKey);
     const auto buffer = listed ? memory.load32(listed) : 0u;
     const auto at = shds_entry(memory, id);
     if (!buffer || !at || memory.load32(at) == buffer) { start(ctx); return; }
@@ -195,6 +246,18 @@ void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t p
         [start](auto &active, std::uint32_t) { start(active); });
 }
 
+inline void sequence(const psprecomp::GuestMemory &memory, psprecomp::AllegrexContext &ctx,
+                     std::uint32_t position, std::vector<std::uint32_t> sounds,
+                     std::function<void(psprecomp::AllegrexContext &)> next) {
+    if (sounds.empty()) { next(ctx); return; }
+    const auto sound = sounds.front();
+    sounds.erase(sounds.begin());
+    play(memory, ctx, position,
+         [&memory, position, sounds = std::move(sounds), next](auto &context) {
+             sequence(memory, context, position, sounds, next);
+         }, sound);
+}
+
 inline bool valid_bank(std::span<const std::uint8_t> bytes, std::uint32_t id, std::size_t limit) {
     if (bytes.size() < 0x40 || bytes.size() > limit) return false;
     auto word = [&bytes](unsigned at) {
@@ -202,9 +265,30 @@ inline bool valid_bank(std::span<const std::uint8_t> bytes, std::uint32_t id, st
                std::uint32_t(bytes[at + 2]) << 16u | std::uint32_t(bytes[at + 3]) << 24u;
     };
     const auto end = bytes.size() - 4;
-    return bytes[0] == 'S' && bytes[1] == 'P' && bytes[2] == id && bytes[3] == 0 &&
-           word(4) == bytes.size() && bytes[end] == 'E' && bytes[end + 1] == 'P' &&
-           bytes[end + 2] == id && bytes[end + 3] == 0;
+    return word(0) == (0x5053u | id << 16u) &&
+           word(4) == bytes.size() && (word(end) == (0x5045u | id << 16u));
+}
+
+inline bool valid_foley(std::span<const std::uint8_t> bytes) {
+    if (!valid_bank(bytes, fulton_audio_catalog::kBank, fulton_audio_catalog::kCapacity) || bytes.size() < 0xd0)
+        return false;
+    auto word = [&](std::size_t at) {
+        return std::uint32_t(bytes[at]) | std::uint32_t(bytes[at + 1]) << 8 |
+               std::uint32_t(bytes[at + 2]) << 16 | std::uint32_t(bytes[at + 3]) << 24;
+    };
+    auto within = [&](std::uint64_t at, std::uint64_t size) {
+        return at <= bytes.size() - 4 && size <= bytes.size() - 4 - at;
+    };
+    if (word(8) != 0x30 || word(12) != 0xb0 || word(16) != 0xd0) return false;
+    for (unsigned i = 0; i < 4; ++i) {
+        if (word(0x30 + i * 32 + 8) != i * 8) return false;
+        const std::uint64_t sample = 0xd0ull + word(0xb0 + i * 8);
+        const std::uint64_t instrument = std::uint64_t(word(0x18)) + word(0xb0 + i * 8 + 4);
+        if (!within(sample, 8) || !within(instrument, 24)) return false;
+        const auto size = word(sample);
+        if (!size || size % 16 || !within(sample + 8, size)) return false;
+    }
+    return true;
 }
 
 inline void install(psprecomp::Runtime &) {
@@ -222,5 +306,10 @@ inline void install(psprecomp::Runtime &) {
     };
     bank = load("fulton.sep", 0x31u, 0x8000u);
     lift_bank = load("fulton-lift.sep", 0x32u, 0x11000u);
+    foley_bank = load("fulton-foley.sep", fulton_audio_catalog::kBank, fulton_audio_catalog::kCapacity);
+    if (!foley_bank.empty() && !valid_foley(foley_bank)) {
+        std::cerr << "[fulton] fulton-foley.sep has invalid cue/sample tables" << std::endl;
+        foley_bank.clear();
+    }
 }
 } // namespace mgs::fulton_sound
