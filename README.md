@@ -50,7 +50,9 @@ Extract the entire archive and run `PortableOpsNative` or
 `PortableOpsPlusNative`. With no installed assets, the built-in setup asks for
 the ISO, validates it and prepares game data before launching. Later launches
 start the game directly. `--install` opens setup again. Data and saves stay
-in the user's data directory when the program is replaced.
+in the user's data directory when the program is replaced. For a portable
+copy, create a folder named `portable` beside the executable: data, saves
+and settings then live there instead (on any system but Android).
 
 ## Local Windows packages
 

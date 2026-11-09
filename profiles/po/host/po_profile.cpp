@@ -18,8 +18,11 @@
 namespace portablekit {
 namespace {
 
+// The game's three save slots: SAVEDATA_DIRECTORY is the disc id and the slot.
 constexpr SaveFolder kSaveFolders[] = {
-    {"ULUS10202", "Game data", true},
+    {"ULUS10202001", "Save 1", true},
+    {"ULUS10202002", "Save 2", true},
+    {"ULUS10202003", "Save 3", true},
 };
 
 // The player's input step, the actors' action bitsets, the engine's pad state
