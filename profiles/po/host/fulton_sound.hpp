@@ -210,6 +210,27 @@ std::uint32_t shds_entry(const Memory &memory, std::uint32_t id) {
 }
 
 // Plays the Fulton sound at a guest position vector (3 floats), or 2D with 0.
+// E540 accepts only [0x144, 0xB9B): appended ids must use its sound2 path.
+// Mirror its listener update and positional call, leaving stock ids unchanged.
+template<class Next>
+void dispatch(psprecomp::AllegrexContext &ctx, std::uint32_t sound,
+              std::uint32_t position, Next next) {
+    if (sound < kFoleySound || sound >= kFoleySound + fulton_audio_catalog::kSounds) {
+        portablekit::hle_extension::call_guest(ctx, kPlay, {sound, 0u, 0u, position}, next);
+    } else if (!position) {
+        portablekit::hle_extension::call_guest(ctx, base + 0x1c5ad8u, {sound, 0u, 0u, 0u}, next);
+    } else {
+        portablekit::hle_extension::call_guest(ctx, base + 0x14a08u, {},
+            [sound, position, next](auto &listener, std::uint32_t matrix) {
+                portablekit::hle_extension::call_guest(listener, base + 0x1c5b68u, {matrix},
+                    [sound, position, next](auto &ready, std::uint32_t) {
+                        portablekit::hle_extension::call_guest(ready, base + 0x1c5b90u,
+                                                               {sound, position, 0u, 0u}, next);
+                    });
+            });
+    }
+}
+
 // sound2's bank entry can be cleared between the stage-start activation and
 // this call (live PO 1.02: after a stage reinit both banks read data 0 and
 // every play was refused), so the bank is activated again first when needed.
@@ -222,7 +243,7 @@ void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t p
     const std::uint32_t id = sound == kSound ? 0x31u : foley ? fulton_audio_catalog::kBank : 0x32u;
     const auto &bytes = sound == kSound ? bank : foley ? foley_bank : lift_bank;
     auto start = [&memory, position, next, sound, id](psprecomp::AllegrexContext &context) {
-        portablekit::hle_extension::call_guest(context, kPlay, {sound, 0u, 0u, position},
+        dispatch(context, sound, position,
             [&memory, next, sound, id](auto &played, std::uint32_t handle) {
                 if (!handle) {
                     std::cerr << std::hex << "[fulton] sound 0x" << sound << " refused";

@@ -257,6 +257,32 @@ int main(int argc, char **argv) {
     assert(effect.arguments == (std::vector<std::uint32_t>{0x272u, 0, 0, work + 0x30u}));
     effect.returned(context, 1);
     assert(returned);
+    // Appended ids exceed E540's hard-coded bound. Use the same listener and
+    // positional sound2 calls directly, preserving arguments across returns.
+    mgs::fulton_sound::foley_current = true;
+    returned = false;
+    mgs::fulton_sound::play(memory, context, work + 0x30u,
+                            [&](auto &) { returned = true; }, mgs::fulton_sound::kFoleySound);
+    const std::array<std::uint32_t, 3> functions{engine + 0x14a08u, engine + 0x1c5b68u, engine + 0x1c5b90u};
+    const std::array<std::vector<std::uint32_t>, 3> arguments{{{}, {0x0888af60u}, {2971, work + 0x30u, 0, 0}}};
+    for (unsigned i = 0; i < functions.size(); ++i) {
+        assert(guest_calls.size() == 1 && !returned);
+        auto call = std::move(guest_calls.back());
+        guest_calls.clear();
+        assert(call.function == functions[i] && call.arguments == arguments[i]);
+        call.returned(context, i == 0 ? 0x0888af60u : 1u);
+    }
+    assert(returned);
+    returned = false;
+    mgs::fulton_sound::dispatch(context, 2974, 0,
+                               [&](auto &, std::uint32_t handle) { returned = handle == 1; });
+    assert(guest_calls.size() == 1);
+    auto flat = std::move(guest_calls.back());
+    guest_calls.clear();
+    assert(flat.function == engine + 0x1c5ad8u);
+    assert(flat.arguments == (std::vector<std::uint32_t>{2974, 0, 0, 0}));
+    flat.returned(context, 1);
+    assert(returned);
     mgs::fulton_sound::stage_changed();
     assert(!mgs::fulton_sound::current && !mgs::fulton_sound::lift_current && !mgs::fulton_sound::foley_current);
     returned = false;

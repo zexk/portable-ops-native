@@ -188,7 +188,10 @@ donor ticks 60, 175 and 280, plus the confirmed ordinary-soldier yank grunt
 at settle cursor 140. Build it with `fulton_sfx.py --foley` from four mono
 44.1 kHz 16-bit WAVs in that order. It uses private bank `0x144` and sound
 IDs `0xB9B` through `0xB9E`; the host extends the sound catalog while
-preserving existing entries. These four new cues need a live playback check.
+preserving existing entries. The first live check confirmed bank loading
+but exposed the engine wrapper's fixed sound-ID limit. Appended cues now
+use its listener and positional sound2 calls directly; playback needs a
+fresh-process check.
 Other voice families and two remaining attachment cues remain unmapped.
 Current body placement snaps the soldier's yaw to Snake's. PW instead
 slides/turns the prone body into a T-shaped arrangement, perpendicular to
