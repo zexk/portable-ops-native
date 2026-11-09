@@ -151,6 +151,21 @@ and life gauges to 0.5 about their corners; the life layout's name text
 is drawn outside every layout (translation tests), so it needs a separate
 boundary.
 
+
+**Implemented** ([`hud_scale.hpp`](../profiles/po/host/hud_scale.hpp)):
+Video's Interface size (50-100%) scales `lay_life_stmn` and `lay_itemwin`
+towards the bottom left, `lay_radar` towards the top right, `lay_wpnwin`
+towards the bottom right and the `lay_itemchange` wheel towards the centre.
+The layout factories `0xA9F18`/`0xAA008` and wrapper `0x196C70` are wrapped
+through [`guest_wrap.hpp`](../profiles/po/host/guest_wrap.hpp), which re-enters
+the function through `call_guest` so its real return value is seen; a
+recompiled unit called directly returns at its first call out of the unit.
+The tuple is written once at creation and no pointer is kept: an earlier
+per-frame version wrote into layouts freed by an area change (freed memory
+keeps its old contents) and corrupted the engine heap. The setting applies
+from the next area loaded. Live: 70% verified for the life gauge and wheel;
+the wheel's dark backdrop shrinks with it, and the character name stays
+full size. The item and weapon window anchors are not yet checked live.
 ## 10. Rich presence
 
 Existing ad hoc diagnostics expose group, nickname and connection state:
@@ -214,6 +229,13 @@ soldier models further out; a live write of the per-actor threshold
 switched soldiers to their full models. See
 [distance LOD table](../../docs/portable-ops/feature-hooks.md#distance-lod-table).
 
+
+**Implemented** ([`detail_distance.hpp`](../profiles/po/host/detail_distance.hpp)):
+Video's Detail distance (100-400%) wraps GCL handler `0x15324` and scales the
+squared distances of the records that call wrote. The per-actor update
+`0x15C48` cannot be wrapped: every caller is in its own generated unit, where
+calls compile to direct jumps. Applies from the next area loaded. Live: 300%
+gave 21000/36000 in place of 7000/12000.
 ## 13. Achievements
 
 PO GCL has global and link storage plus a variable assignment boundary at
