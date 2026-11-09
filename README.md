@@ -204,8 +204,12 @@ degrees along the shortest arc. The one-eighth-per-tick easing approximates
 the PW capture; its exact integer rule remains unmapped. The actor root
 position stays unchanged, as observed in PW. Harness orientation follows
 the two bone points during attachment, then stays fixed while its origin
-follows bone 2 during lift. These placement changes need a live PO check;
-the visible body slide still needs animation/root-bone analysis. Missing
+follows bone 2 during lift. Live testing found rotation broadly similar to
+PW, but animation synchronization remains wrong. Current balloon growth
+starts at 55% of attach while the enemy yank waits for attach completion;
+PW trace shows balloon/lift starting before Snake finishes placing.
+A focused frame-linked trace is prepared to resolve that overlap and
+growth timing. The visible body slide still needs animation/root-bone analysis. Missing
 or invalid bone matrices use the saved enemy position and a rigid fallback.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
