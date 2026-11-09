@@ -182,6 +182,21 @@ must initialize the observation baseline rather than emit every existing
 flag as a new event. Achievement definitions, persistence and remaining
 mission/unlock flags still need work.
 
+Follow-up static RE separated script snapshots from disk saves. Command
+`0x5B316E` at engine `0x8EA4` copies link/global banks into RAM snapshots,
+or updates selected snapshot variables. Inverse copy `0x3E8D8` restores them
+without passing through assignment hook `0x3EEA8`. Any progress observer must
+rebaseline at restore/initialization boundaries; command names alone do not
+prove a save or unlock. Bank sizes and addresses are recorded in
+[script-bank snapshots](../../docs/portable-ops/gcl.md#script-bank-snapshots).
+
+The existing GCX decompiler produced partial `ending`/`st20` listings but
+terminated with `unpack requires a buffer of 1 bytes`. Those listings were
+used only to locate candidates; no completion-flag meaning was accepted from
+them. Native copy paths and initializers independently establish the bank
+spans. Flag semantics still need stronger script/control-flow evidence or
+live correlation.
+
 ## 14. Through-mode interpolation
 
 [`mark_eligible`](../portablekit/host/gpu/frame_interpolation.cpp) requires
