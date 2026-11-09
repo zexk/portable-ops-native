@@ -169,8 +169,8 @@ completion or ordinary gameplay. See
 [stage identity](../../docs/portable-ops/feature-hooks.md#stage-identity-for-observers).
 This can avoid an additional file-open wrapper for PO. PO+ US 1.01 equivalents
 are now mapped statically: request `0x41498`, wrapper `0x453C`, loader
-`0x4115C` and startup `0x20B8`. PO+ EU/JP addresses, human mission names
-and application integration still need verification/mapping.
+`0x4115C` and startup `0x20B8`; EU and JP are in the same table. Human
+mission names and application integration still need mapping.
 
 ## 12. Draw distance, shadows and LOD
 
