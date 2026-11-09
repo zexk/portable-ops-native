@@ -201,6 +201,14 @@ set/clear helpers and hierarchy propagation, so globally clearing them is
 not a justified LOD override. Rigid parts also have separate clip results.
 No scalar distance-based LOD threshold has been verified in these paths.
 
+A separate distance LOD switch exists: per-actor squared thresholds from a
+64-entry table at `0x20D650`, filled only by GCL handler `0x15324`. No
+engine or stage reference to that handler was found, so the table appears
+to stay empty and actors draw their base models. See
+[distance LOD table](../../docs/portable-ops/feature-hooks.md#distance-lod-table).
+If a live check confirms a zero count, LOD overrides have nothing to extend;
+draw distance then rests on the view near/far limits.
+
 ## 13. Achievements
 
 PO GCL has global and link storage plus a variable assignment boundary at
