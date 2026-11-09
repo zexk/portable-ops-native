@@ -257,9 +257,11 @@ live correlation.
 
 The disk save path is in the `title`/`briefing`/`ending` stage modules: a
 GCL-driven savedata actor saves a `0xA610`-byte buffer, the size of the two
-snapshot banks plus 4 bytes. If confirmed, achievements can be driven from
-snapshot diffs at `0x3E73C` (the copy made before a save) instead of every
-assignment. See [disk save](../../docs/portable-ops/gcl.md#disk-save).
+snapshot banks plus 4 bytes. A live briefing autosave confirmed it: the
+saved buffer is a header word followed by exactly the link and global
+snapshot banks. Achievements can therefore be driven from snapshot diffs at
+`0x3E73C` (the copy made before a save) instead of every assignment; naming
+the individual flags is the remaining work. See [disk save](../../docs/portable-ops/gcl.md#disk-save).
 
 ## 14. Through-mode interpolation
 
