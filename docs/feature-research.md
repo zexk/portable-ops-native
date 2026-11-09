@@ -45,9 +45,17 @@ A scan of the named PO stage archives found layout candidates such as
 `lay_codecicon.la2`, `lay_itemlist.la2`, `lay_property.la2` and
 `lay_bottommenu.la2`. It did not establish a dedicated button texture pack;
 hashed archives and shared atlases remain to resolve. A global atlas swap
-could replace text or unrelated icons alongside the buttons. Next step:
-resolve layout texture hashes and UV rectangles, then associate replacement
-images with the selected controller without reloading an entire HD pack.
+could replace text or unrelated icons alongside the buttons.
+
+Follow-up static pass resolved the container and texture-reference tables:
+all 5,138 references in 311 layouts across 100 PO stages match their QAR
+resource name plus texture hash. The scanner and format are documented in
+[layout texture references](../../docs/portable-ops/feature-hooks.md#layout-texture-references-and-qar-resources).
+Briefing bottom-menu and item-list resources are now located, including their
+texture records and UV words. Packed image descriptors are preserved rather
+than guessed as plain dimensions. Specific controller glyphs and layout
+node transforms remain unidentified. Next step: identify those rectangles,
+then select replacements without reloading an entire HD pack.
 
 ## 4. Cutscene and codec skipping
 
@@ -123,8 +131,14 @@ observation boundary; a presence observer must chain the previous handler
 and preserve any installed Fulton file filter.
 
 Separate a small, local state provider from any optional Discord transport.
-Human mission names, mission completion and application integration still
-need configuration/mapping.
+Follow-up static RE located a more direct PO boundary: `0x39A20(name)`
+receives the requested stage name, with wrapper `0x3B08(name)`. Loader
+`0x396E4` case 5 reaches stage startup `0x1E1C` after pending work drains.
+Observe request and initialization separately; neither alone proves mission
+completion or ordinary gameplay. See
+[stage identity](../../docs/portable-ops/feature-hooks.md#stage-identity-for-observers).
+This can avoid an additional file-open wrapper for PO. PO+ addresses, human
+mission names and application integration still need verification/mapping.
 
 ## 12. Draw distance, shadows and LOD
 
