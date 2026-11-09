@@ -10,21 +10,19 @@
 //
 // HUD layouts are recognised when they are made: the layout actor factories
 // 0xA9F18/0xAA008 (hash in a0, actor handle back, layout at actor +0x40) and
-// the constructor wrapper 0x196C70 (hash in a0, layout back). These are called
-// from other generated units, so wrapping them sees every call. Once a frame
-// the recorded layouts get the tuple for the current setting; a record whose
-// LA2 file pointer (+0x10) changed belongs to a freed layout and is dropped.
-// The character name beside the life gauge is drawn outside the layouts and
-// keeps its size.
+// the constructor wrapper 0x196C70 (hash in a0, layout back). The tuple is set
+// right then, while the layout is certainly alive, so the setting applies from
+// the next area loaded. Pointers are never kept: the engine frees layouts on
+// an area change and freed memory keeps its old contents, so a later write
+// through a kept pointer corrupts the heap. The character name beside the
+// life gauge is drawn outside the layouts and keeps its size.
 
 #include "guest_wrap.hpp"
 #include "psprecomp/runtime.hpp"
 #include "settings/settings.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <iostream>
-#include <vector>
 
 namespace mgs::hud_scale {
 
@@ -39,13 +37,6 @@ constexpr Anchor kAnchors[] = {
     {0x81B2CEu, 0, 272}, {0xC14397u, 480, 0}, {0x247E79u, 0, 272}, {0x1DCA51u, 480, 272}, {0x27D75Cu, 240, 136},
 };
 
-struct Layout {
-    std::uint32_t object, file;
-    Anchor anchor;
-};
-
-inline std::vector<Layout> layouts;
-
 inline const Anchor *anchor_for(std::uint32_t key) {
     for (const Anchor &a : kAnchors)
         if (a.hash == (key & 0xFFFFFFu)) return &a;
@@ -55,9 +46,15 @@ inline const Anchor *anchor_for(std::uint32_t key) {
 inline void remember(psprecomp::Runtime &rt, std::uint32_t key, std::uint32_t object) {
     const Anchor *anchor = anchor_for(key);
     if (anchor == nullptr || object < 0x08800000u || object >= 0x0A000000u - 0x120u) return;
-    const std::uint32_t file = rt.memory().load32(object + 0x10u);
-    std::erase_if(layouts, [&](const Layout &l) { return l.object == object; });
-    layouts.push_back({object, file, *anchor});
+    const float k = static_cast<float>(portablekit::settings::current().hud_scale_percent) / 100.0f;
+    if (k == 1.0f) return;
+    auto &memory = rt.memory();
+    const auto tx = static_cast<std::int16_t>(16.0f * anchor->x * (1.0f - k));
+    const auto ty = static_cast<std::int16_t>(16.0f * anchor->y * (1.0f - k));
+    const auto scale = static_cast<std::uint16_t>(k * 256.0f);
+    memory.store32(object + 0x114u, static_cast<std::uint16_t>(tx) | (static_cast<std::uint32_t>(static_cast<std::uint16_t>(ty)) << 16u));
+    memory.store32(object + 0x118u, (memory.load32(object + 0x118u) & 0xFFFFu) | (static_cast<std::uint32_t>(scale) << 16u));
+    memory.store32(object + 0xCu, memory.load32(object + 0xCu) | 0x100000u);
 }
 
 // Handle low word is the actor's address / 16 (0xAA338 checks actor +0x18).
@@ -98,24 +95,6 @@ inline void make_layout(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext
         return;
     }
     wrapper.around(rt, ctx, [key](psprecomp::Runtime &r, std::uint32_t object) { remember(r, key, object); });
-}
-
-inline void frame(psprecomp::Runtime &rt) {
-    auto &memory = rt.memory();
-    const float k = static_cast<float>(portablekit::settings::current().hud_scale_percent) / 100.0f;
-    std::erase_if(layouts, [&](const Layout &l) { return memory.load32(l.object + 0x10u) != l.file; });
-    for (const Layout &l : layouts) {
-        const auto tx = static_cast<std::int16_t>(16.0f * l.anchor.x * (1.0f - k));
-        const auto ty = static_cast<std::int16_t>(16.0f * l.anchor.y * (1.0f - k));
-        const auto scale = static_cast<std::int16_t>(k * 256.0f);
-        const std::uint32_t xy = static_cast<std::uint16_t>(tx) | (static_cast<std::uint32_t>(static_cast<std::uint16_t>(ty)) << 16u);
-        const std::uint32_t angle_scale = memory.load32(l.object + 0x118u);
-        const std::uint32_t want = (angle_scale & 0xFFFFu) | (static_cast<std::uint32_t>(static_cast<std::uint16_t>(scale)) << 16u);
-        if (memory.load32(l.object + 0x114u) == xy && angle_scale == want) continue;
-        memory.store32(l.object + 0x114u, xy);
-        memory.store32(l.object + 0x118u, want);
-        memory.store32(l.object + 0xCu, memory.load32(l.object + 0xCu) | 0x100000u);
-    }
 }
 
 inline void install(psprecomp::Runtime &runtime, std::uint32_t make_actor_at, std::uint32_t make_actor2_at,
