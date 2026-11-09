@@ -152,20 +152,11 @@ is drawn outside every layout (translation tests), so it needs a separate
 boundary.
 
 
-**Implemented** ([`hud_scale.hpp`](../profiles/po/host/hud_scale.hpp)):
-Video's Interface size (50-100%) scales `lay_life_stmn` and `lay_itemwin`
-towards the bottom left, `lay_radar` towards the top right, `lay_wpnwin`
-towards the bottom right and the `lay_itemchange` wheel towards the centre.
-The layout factories `0xA9F18`/`0xAA008` and wrapper `0x196C70` are wrapped
-through [`guest_wrap.hpp`](../profiles/po/host/guest_wrap.hpp), which re-enters
-the function through `call_guest` so its real return value is seen; a
-recompiled unit called directly returns at its first call out of the unit.
-The tuple is written once at creation and no pointer is kept: an earlier
-per-frame version wrote into layouts freed by an area change (freed memory
-keeps its old contents) and corrupted the engine heap. The setting applies
-from the next area loaded. Live: 70% verified for the life gauge and wheel;
-the wheel's dark backdrop shrinks with it, and the character name stays
-full size. The item and weapon window anchors are not yet checked live.
+An Interface size setting was built on this boundary and verified live
+(tuple written at layout creation; a per-frame variant corrupted the heap by
+writing into layouts freed on an area change), then dropped: the HUD already
+scales with the picture at any resolution, Fill already scales it to the
+window, and shrinking it is taste rather than a fix.
 ## 10. Rich presence
 
 Existing ad hoc diagnostics expose group, nickname and connection state:
