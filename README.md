@@ -190,8 +190,10 @@ at settle cursor 140. Build it with `fulton_sfx.py --foley` from four mono
 IDs `0xB9B` through `0xB9E`; the host extends the sound catalog while
 preserving existing entries. The first live check confirmed bank loading
 but exposed the engine wrapper's fixed sound-ID limit. Appended cues now
-use its listener and positional sound2 calls directly; playback needs a
-fresh-process check.
+use its listener and positional sound2 calls directly. The user confirmed
+new audio playback on a fresh launch; logs show bank activation, completed
+recovery and no sound refusals. Survival across a stage reset still needs
+a live check for this new bank.
 Other voice families and two remaining attachment cues remain unmapped.
 Current body placement snaps the soldier's yaw to Snake's. PW instead
 slides/turns the prone body into a T-shaped arrangement, perpendicular to
