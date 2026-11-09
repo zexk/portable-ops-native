@@ -135,7 +135,17 @@ reach the GPU path, rewritten only when its dirty flag is set. Scaling a
 known HUD layout about a screen anchor needs no vertex classification, but
 still moves that layout's backgrounds and text and is clipped by the rect.
 See [LA2 render commands](../../docs/portable-ops/feature-hooks.md#la2-render-commands).
-Which live layouts form the HUD remains unverified.
+
+HUD layouts are now named statically. The engine builds `lay_life_stmn`,
+`lay_radar`, `lay_itemwin`, `lay_wpnwin` and `lay_itemchange` from the
+resident archive, mostly through layout actor factory `0xA9F18`; weapon
+sights (`scope`, `dragunov`, `rpg7`, `gl`, `moshinnagan`) are separate
+full-screen layouts that must stay unscaled. A profile hook can match the
+factory's name hash and set that layout's tuple, leaving through-mode
+vertices alone. Stage-built `lay_msg`, `lay_call`, `lay_codecfooter` and
+`lay_fulton` need the same treatment from stage code. See
+[engine-built layouts](../../docs/portable-ops/feature-hooks.md#engine-built-layouts).
+No scaling has been tried live.
 
 ## 10. Rich presence
 
