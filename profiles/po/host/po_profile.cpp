@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "camera.hpp"
+#include "detail_distance.hpp"
 #include "fulton.hpp"
 #include "interpolation.hpp"
 #include "profile.hpp"
@@ -43,6 +44,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera_trace(runtime, 0x08804000u + 0x10D304u);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
+    mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);
 }
 
 } // namespace
@@ -89,6 +91,7 @@ const GameProfile &game() {
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .adjustable_fov = true,
+        .adjustable_detail_distance = true,
         .interpolation_thresholds = &mgs::kInterpolationThresholds,
 
         // North American console, English. The game confirms with circle
