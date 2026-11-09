@@ -148,7 +148,8 @@ vertices alone. Stage-built `lay_msg`, `lay_call`, `lay_codecfooter` and
 A live read in `st01` confirmed these HUD layouts at identity tuple and
 full-screen rect. A live write of the tuple plus dirty flag scaled the radar
 and life gauges to 0.5 about their corners; the life layout's name text
-kept its size, so text nodes need separate handling.
+is drawn outside every layout (translation tests), so it needs a separate
+boundary.
 
 ## 10. Rich presence
 
