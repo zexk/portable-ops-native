@@ -29,7 +29,7 @@ to Portable Ops Native.
   conversion from both sources, operation after removing the donor source,
   and Game-tab enable/disable behavior with valid and missing assets.
 
-Fulton has a converted-bundle developer installer and an experimental Game-tab
-toggle. Its existing PSP donor preparation is not a player-facing importer.
+Fulton has an experimental Game-tab toggle and a Game-tab import of converted
+bundles (also `scripts/fulton-assets.py`). Its existing PSP donor preparation is not a player-facing importer.
 Direct PSP ISO and MC imports remain pending; this pipeline is not yet
 production-ready.

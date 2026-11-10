@@ -3,7 +3,9 @@
 #include "fulton_assets.hpp"
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
+#include "ui/file_browser.hpp"
 #include "ui/widgets.hpp"
+#include <memory>
 #endif
 
 namespace mgs::fulton_settings {
@@ -24,6 +26,34 @@ inline void reset() {
     if (!portablekit::hle_extension::env("FULTON")) save(false);
 }
 
+#if defined(PORTABLEKIT_HAS_RENDERER)
+inline std::unique_ptr<portablekit::ui::FileBrowser> browser;
+#endif
+
+// The folder browser of "Import Fulton assets…". True while it is open.
+inline bool screen([[maybe_unused]] bool back) {
+#if defined(PORTABLEKIT_HAS_RENDERER)
+    using portablekit::ui::FileBrowser;
+    if (!browser) return false;
+    const auto result = browser->frame(back);
+    if (result == FileBrowser::Result::Chosen) {
+        try {
+            const auto count = fulton_assets::import_bundle(browser->chosen());
+            // The running game keeps its startup snapshot; only the menu learns.
+            fulton_assets::available = true;
+            fulton_assets::status = std::to_string(count) + " prepared stages imported";
+        } catch (const std::exception &error) {
+            fulton_assets::status = "Import failed: not a converted Fulton folder";
+            std::cerr << "[fulton] import failed: " << error.what() << std::endl;
+        }
+    }
+    if (result != FileBrowser::Result::Browsing) browser.reset();
+    return true;
+#else
+    return false;
+#endif
+}
+
 inline void draw() {
 #if defined(PORTABLEKIT_HAS_RENDERER)
     using namespace portablekit::ui;
@@ -34,10 +64,25 @@ inline void draw() {
     options.note = override ? "Developer override" : fulton_assets::status;
     options.description = "Recover unconscious or prone held-up soldiers with Triangle while beside them. "
                           "Applies after restarting the game. Works only in prepared stages; "
-                          "unsupported stages leave the soldier in place. "
-                          "Asset import is not available in this build's menu; see the Fulton setup in README.";
+                          "unsupported stages leave the soldier in place.";
     if (toggle_row("Fulton recovery (experimental)", fulton_assets::selected, options))
         save(!fulton_assets::selected);
+    if (!override && !fulton_assets::available &&
+        button_row("Import Fulton assets…",
+                   {false, {}, "Choose a folder of converted Fulton assets, the one that holds index.txt. "
+                               "They are checked and copied into the game's own data; the folder is not "
+                               "needed afterwards. Importing does not turn Fulton on."})) {
+        FileBrowser::Options browse;
+        browse.extensions = {};
+        browse.filter_name = browse.listed_name = "folders";
+        browse.empty_note = "No folders here.";
+        browse.choose_folder = "Import from this folder";
+        browse.choose_on_open = [](const std::filesystem::path &folder) {
+            std::error_code error;
+            return std::filesystem::is_regular_file(folder / "index.txt", error);
+        };
+        browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
+    }
     if (!override && fulton_assets::selected != fulton_assets::enabled())
         info_row("Fulton", fulton_assets::available ? "Restart to apply" : "Inactive: assets required");
 #endif

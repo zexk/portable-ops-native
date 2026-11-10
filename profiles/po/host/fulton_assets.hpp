@@ -87,6 +87,39 @@ inline std::vector<Stage> checked_stages(const std::filesystem::path &root) {
     return result;
 }
 
+// Copies a converted bundle into the port's user data: the index, the stages
+// it names and the known optional extras, nothing else. The copy is verified
+// before it replaces anything. Selection and the running game are untouched.
+inline std::size_t import_bundle(const std::filesystem::path &source) {
+    namespace fs = std::filesystem;
+    const auto found = checked_stages(source);
+    const auto destination = portablekit::install::user_data_directory() / "pw" / "fulton";
+    std::error_code ignored;
+    if (fs::equivalent(source, destination, ignored)) throw std::runtime_error("Folder is already the installed one");
+    const auto staged = destination.parent_path() / ".fulton-import";
+    fs::remove_all(staged);
+    fs::create_directories(staged);
+    try {
+        fs::copy_file(source / "index.txt", staged / "index.txt");
+        for (const auto &stage : found) fs::copy_file(stage.replacement, staged / stage.replacement.filename());
+        // Same names and size limits as scripts/fulton-assets.py.
+        for (const auto &[name, limit] : {std::pair{"fult_place.mtar", 0x10000u}, std::pair{"fulton.sep", 0x8000u},
+                                          std::pair{"fulton-lift.sep", 0x11000u},
+                                          std::pair{"fulton-foley.sep", 0x9000u}}) {
+            const auto extra = source / name;
+            if (!fs::is_symlink(extra) && fs::is_regular_file(extra) && fs::file_size(extra) <= limit)
+                fs::copy_file(extra, staged / name);
+        }
+        const auto count = checked_stages(staged).size();
+        fs::remove_all(destination);
+        fs::rename(staged, destination);
+        return count;
+    } catch (...) {
+        fs::remove_all(staged, ignored);
+        throw;
+    }
+}
+
 class Filter final : public portablekit::hle_extension::FileFilter {
 public:
     explicit Filter(std::vector<std::uint8_t> bytes) : bytes_(std::move(bytes)) {}

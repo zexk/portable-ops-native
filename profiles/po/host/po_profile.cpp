@@ -91,6 +91,7 @@ const GameProfile &game() {
         .module_code_ready = &mgs::fulton::module_ready,
         .draw_game_settings = &mgs::fulton_settings::draw,
         .reset_game_settings = &mgs::fulton_settings::reset,
+        .game_settings_screen = &mgs::fulton_settings::screen,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .adjustable_fov = true,

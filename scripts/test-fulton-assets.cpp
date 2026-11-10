@@ -67,6 +67,22 @@ int main(int argc, char **argv) {
         assert(assets::selected && !assets::available && !assets::enabled());
     }
     index(row);
+    // Import: a verified copy, extras by name only, nothing enabled by it.
+    const auto donor = root / "donor";
+    fs::rename(bundle, donor);
+    std::ofstream(donor / "fulton.sep") << "bank";
+    std::ofstream(donor / "notes.txt") << "stray";
+    mgs::fulton_settings::reset();
+    assert(assets::import_bundle(donor) == 1);
+    assert(fs::exists(bundle / "fulton.sep") && !fs::exists(bundle / "notes.txt"));
+    assert(!assets::selection(settings::read_settings_file(root)));
+    fs::remove_all(donor); // The source is not needed afterwards.
+    assets::load();
+    assert(assets::available && !assets::selected && !assets::enabled());
+    try { assets::import_bundle(root / "missing"); assert(false); } catch (const std::exception &) {}
+    assets::load();
+    assert(assets::available); // A failed import leaves the installed copy.
+    mgs::fulton_settings::save(true);
     std::ofstream(bundle / "st01.zar", std::ios::app) << "changed";
     assets::load();
     assert(assets::selected && !assets::enabled());

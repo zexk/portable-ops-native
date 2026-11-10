@@ -165,8 +165,15 @@ in `settings.ini`; changes require a restart. Startup checks every indexed
 stage's size and SHA-256. Missing or damaged stages leave Fulton inactive
 without blocking PO; the saved selection is kept. Restore game defaults
 turns the selection off. Only prepared stages support recovery; other stages
-cancel the attempt and retain the soldier. The menu explains unavailable
-assets; it does not yet import them.
+cancel the attempt and retain the soldier.
+
+While assets are missing or invalid, **Import Fulton assets…** in the same
+section opens the folder browser. Choosing a converted bundle folder (the one
+holding `index.txt`) checks its stages, copies the index, those stages and
+the known optional sound and placement files into `pw/fulton`, and checks the
+copy before it replaces anything. It does not change the selection, and the
+source folder is not needed afterwards. It takes converted bundles only, not
+a raw PW ISO or MC installation.
 
 `MGSPO_FULTON_STAGE_DIR` can still override the bundle directory for developer
 tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
@@ -186,9 +193,9 @@ c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
 out/test-fulton-assets
 ```
 
-Bundle checks and a Linux port build pass. The new Game-tab control still
-needs an in-game check; conversion from both raw donor formats remains
-unverified.
+Bundle checks and a Linux port build pass. The Game-tab toggle and import
+were checked in game on Linux (ULUS-10202); conversion from both raw donor
+formats remains unverified.
 
 ## Optional Fulton prototype (PO only)
 
