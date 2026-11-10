@@ -202,7 +202,8 @@ last requested stage name. A bounded PO boot logged `init`, `r_main01` and
 `title` in that order, and so did PO+ US; EU and JP are compiled only. Area
 names come from the
 twenty-entry table every scenario carries; that entry N names `st<N+1>`
-is inferred from the online maps and unconfirmed in game (see the stage
+is inferred from the online maps and confirmed in game for one area, `st01t2`
+as the Communications Base, on 2026-11-11 (see the stage
 identity section linked above). Nothing consumes the state yet: a Discord
 transport needs an application id and an opt-in setting.
 

@@ -12,7 +12,8 @@
 // one the save list prints a save's place from. That entry N names stage
 // st<N+1> is inferred, not traced: the eight names the twelve online maps
 // carry are exactly entries 1, 2, 3, 5, 9, 12, 14 and 18, and n01, n02, n03,
-// n05, n09, n12, n14 and n18 all exist. Not confirmed against the game.
+// n05, n09, n12, n14 and n18 all exist. One area checked in game (PO NA 1.02):
+// st01t2 is the Communications Base on the map.
 
 #include "profile.hpp"
 #include "psprecomp/runtime.hpp"
