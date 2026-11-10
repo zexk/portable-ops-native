@@ -47,7 +47,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera_trace(runtime, kCameraUpdate);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
-    mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);
+    mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u, 0x08804000u + 0x1EA680u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
     mgs::boot_skip::install(runtime);
 }

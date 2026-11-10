@@ -23,7 +23,8 @@ namespace mgs::detail_distance {
 
 constexpr std::uint32_t kRecords = 64u, kStride = 20u;
 inline GuestWrap handler;
-inline std::uint32_t table = 0;  // guest address of the count
+inline std::uint32_t table = 0;        // guest address of the count
+inline std::uint32_t shadow_fade = 0;  // guest address of the fade start, then its end
 
 inline void register_lod(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     if (handler.inner) {
@@ -37,8 +38,13 @@ inline void register_lod(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
         before[i] = memory.load32(table + 4u + (i / 2) * kStride + 12u + (i % 2) * 4u);
     handler.around(rt, ctx, [before](psprecomp::Runtime &r, std::uint32_t) {
         const std::uint32_t percent = portablekit::settings::current().detail_distance_percent;
-        if (percent == 100u) return;
         auto &mem = r.memory();
+        // Foot shadows fade from 5000 to 10000 units from the camera (the two
+        // floats are literals of their update, 0x14F70C, alone); the fade ends
+        // at twice its start, so both scale together.
+        mem.store32(shadow_fade, std::bit_cast<std::uint32_t>(50.0f * static_cast<float>(percent)));
+        mem.store32(shadow_fade + 4u, std::bit_cast<std::uint32_t>(100.0f * static_cast<float>(percent)));
+        if (percent == 100u) return;
         const float scale = static_cast<float>(percent * percent) / 10000.0f;  // distances are squared
         const std::uint32_t count = mem.load32(table);
         for (std::uint32_t i = 0; i < kRecords * 2 && i / 2 < count; ++i) {
@@ -49,8 +55,9 @@ inline void register_lod(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
     });
 }
 
-inline void install(psprecomp::Runtime &runtime, std::uint32_t at, std::uint32_t lod_table) {
+inline void install(psprecomp::Runtime &runtime, std::uint32_t at, std::uint32_t lod_table, std::uint32_t fade) {
     table = lod_table;
+    shadow_fade = fade;
     if (handler.install(runtime, at, &register_lod, "mgs_register_lod"))
         std::cout << "[detail] LOD records scaled at 0x" << std::hex << at << std::dec << std::endl;
 }

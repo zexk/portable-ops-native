@@ -171,6 +171,8 @@ scales with the picture at any resolution, Fill already scales it to the
 window, and shrinking it is taste rather than a fix.
 ## 10. Rich presence
 
+Discord rich presence is planned for a later release.
+
 Existing ad hoc diagnostics expose group, nickname and connection state:
 [`client.hpp`](../portablekit/host/adhoc/client.hpp) and
 [`session.hpp`](../portablekit/host/adhoc/session.hpp). These can describe
@@ -224,6 +226,15 @@ only disables GPU back-face culling; it cannot restore objects the engine
 never submitted. Shadow improvement also needs to distinguish shadow
 geometry/projection from texture resolution before choosing a control.
 
+Static [contact-shadow research](../../docs/portable-ops/shadows.md) now maps
+the two-quad component: constructor `0x150104`, update `0x14F70C`, texture
+hash `0x7DF176` (32 by 32 indexed footprint), reverse-subtract blending,
+5000-to-10000-unit distance fade and height-dependent spread/opacity.
+Per-component opacity and size controls exist; the shared GE blend helper
+also serves unrelated effects. Bone identities, contact-vector provenance
+and other shadow paths remain open. Live checks are on that page; the only
+runtime change is the fade range under Detail distance (item 12).
+
 Follow-up static RE mapped the rejection pipeline in
 [model rejection and part masks](../../docs/portable-ops/feature-hooks.md#model-rejection-and-part-masks).
 Object `+0x6E` receives an eight-corner clip result from `0x4A7C4`; result 2
@@ -248,8 +259,14 @@ Video's Detail distance (100-400%) wraps GCL handler `0x15324` and scales the
 squared distances of the records that call wrote. The per-actor update
 `0x15C48` cannot be wrapped: every caller is in its own generated unit, where
 calls compile to direct jumps. Applies from the next area loaded. Live: 300%
-gave 21000/36000 in place of 7000/12000.
+gave 21000/36000 in place of 7000/12000. The same setting scales the foot
+shadow fade (floats `0x1EA680`/`0x1EA684`, 5000 and 10000 units, used only
+by update `0x14F70C`), written at the same moment. Live, 2026-11-11: 400%
+read back 20000/40000 and soldiers up to 39000 units away kept shadows.
 ## 13. Achievements
+
+Achievements and RetroAchievements support are planned for the next release.
+Save states and quick resume remain later work.
 
 PO GCL has global and link storage plus a variable assignment boundary at
 ELF `0x3EEA8`. Offsets need semantic identification before they can become
