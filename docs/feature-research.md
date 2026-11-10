@@ -373,6 +373,12 @@ assumed two vblanks a frame and stayed one vblank early once the cadence
 shifted; the same happened without the new modes in 20 fps play (code
 time 12 ms against 2 ms in menus, the "14 ms" of earlier notes). Two flips
 the same distance apart now re-anchor the grid. After the fix code time
-in 30 fps menus is 2 to 5 ms and the user reports no judder; some seconds
-of 20 fps play still show 14 ms, cause not yet traced. Physical latency
+in 30 fps menus is 2 to 5 ms and the user reports no judder. Early frames
+are stamped with their own vblank and skip the grid.
+
+The 16 ms of code time that remains in 20 fps play is real: with real
+time in the pacing trace, one frame takes about 11 ms from the pad read
+to the finished picture (update about 5 ms, display lists about 4 ms),
+against 2 to 3 ms in menus. The pad's age at the finished picture went
+from two game frames (100 ms in play) to that work time. Physical latency
 remains unmeasured.
