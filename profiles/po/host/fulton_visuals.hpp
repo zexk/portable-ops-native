@@ -267,11 +267,17 @@ inline void dispose(Runtime &runtime, Context &ctx, bool complete) {
     });
 }
 
-// Request clip on a motion as the game does (layer 0, full-body mask), then next.
+// Request clip on a motion as the game does (layer 0, full-body mask), then
+// release the upper-body layer so the clip owns the arms too: with a weapon
+// out that layer holds the aim pose over any full-body clip. The hand-back
+// replays the engine's last own request for it. Then next.
 inline void play(Context &ctx, std::uint32_t motion, std::uint32_t clip, std::function<void(Context &)> next) {
     selecting_motion = true;
     portablekit::hle_extension::call_guest(ctx, base + 0x7f264u, {motion, 0, clip, 0, 0x7ffffu, 0},
-        [next](auto &context, std::uint32_t) { selecting_motion = false; next(context); });
+        [motion, next](auto &context, std::uint32_t) {
+            portablekit::hle_extension::call_guest(context, base + 0x7f634u, {motion, 1u},
+                [next](auto &released, std::uint32_t) { selecting_motion = false; next(released); });
+        });
 }
 
 // Hands a motion back: the archive words, then the engine's last own request
