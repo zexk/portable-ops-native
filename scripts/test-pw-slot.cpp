@@ -1,12 +1,15 @@
 // Texture pack conversion on synthetic data; then, given a local Peace Walker
-// PSP image (ULES-01372 1.01), test-pw-slot PW.iso extracts the Fulton models
-// and packs and checks the SHA-256 of both the raw and the converted files.
+// PSP image (ULES-01372 1.01), test-pw-slot PW.iso [OUTPUT] converts the whole
+// Fulton bundle, checks it and optionally writes it to OUTPUT.
 #include "../profiles/po/host/fulton_convert.hpp"
 #include "../profiles/po/host/pw_slot.hpp"
 #include "psprecomp/sha256.hpp"
 
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <tuple>
 
 int main(int argc, char **argv) {
     {
@@ -85,36 +88,45 @@ int main(int argc, char **argv) {
     }
     assert(found.at(0x13f66bb7u).size() == 8192 && found.at(0x13430af6u).size() == 8752);
     assert(std::memcmp(found.at(0x13f66bb7u).data(), "MDP ", 4) == 0);
-    // Converted, byte for byte what scripts/prepare-fulton-assets.py writes.
-    const auto bundle = mgs::fulton_convert::models(found);
+    // The bundle: byte for byte what the Python tools wrote from the same disc.
+    const auto bundle = mgs::fulton_convert::bundle(iso);
     for (const auto &[name, hash] : {
              std::pair{"fult_item_balloon.txp", "426b9dc80a36cb586fa602c6a8eabe5ac9667048cdb137738a61d4ef21973b03"},
              std::pair{"fult_item_body.txp", "90931257b47d78d6f78f23c4b776f3ce19bf6583fa8953d147fd17ba2f224b86"},
              std::pair{"fult_item_balloon.mdp", "05bf11dc72a11641218897876a2c0b0dee93d29f2460c28d76e8fe9964c1cfd1"},
-             std::pair{"fult_item_body.mdp", "012249e527a5405e1751235304fb3d52773162eeaea3a5550543632ae1a96795"}}) {
+             std::pair{"fult_item_body.mdp", "012249e527a5405e1751235304fb3d52773162eeaea3a5550543632ae1a96795"},
+             std::pair{"fult_enemy.mtar", "5fc52d5c4234d551231b34310875270d7e497b49848bdb8442a7c7dab7b9ff03"},
+             std::pair{"fult_place.mtar", "a82f6e3d55b77e8d982764cf6005f1e7167f1095ad751ef53359b6eb07ee3e56"},
+             std::pair{"fulton.sep", "f15c1f262d09969bbe486306f13c0d73e942d9940f875daaa11181ba939974a1"}}) {
         const auto digest = psprecomp::sha256_bytes(bundle.at(name));
         std::cout << name << ' ' << digest << '\n';
         assert(digest == hash);
     }
-    // Motions: the first stage archive of each name whose clips convert.
-    mgs::fulton_convert::Bytes lift, place, sound;
-    unsigned archives = 0;
-    mgs::pw_slot::stage_files(iso, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
-        try {
-            if (lift.empty() && name == "enedam.mtar") { ++archives; lift = mgs::fulton_convert::mtar(bytes, {101, 103}); }
-            if (place.empty() && name == "snake_coop.mtar") { ++archives; place = mgs::fulton_convert::mtar(bytes, {156}); }
-            if (sound.empty() && name == "segrp_75_furuton.sep") sound = mgs::fulton_convert::bank(bytes, 0x31);
-        } catch (const std::runtime_error &) {}
-        return !lift.empty() && !place.empty() && !sound.empty();
-    });
-    std::cout << "motion archives tried " << archives << '\n';
-    for (const auto &[bytes, hash] : {
-             std::pair{&lift, "5fc52d5c4234d551231b34310875270d7e497b49848bdb8442a7c7dab7b9ff03"},   // fult_enemy.mtar
-             std::pair{&place, "a82f6e3d55b77e8d982764cf6005f1e7167f1095ad751ef53359b6eb07ee3e56"},  // fult_place.mtar
-             std::pair{&sound, "f15c1f262d09969bbe486306f13c0d73e942d9940f875daaa11181ba939974a1"}}) { // fulton.sep
-        const auto digest = psprecomp::sha256_bytes(*bytes);
-        std::cout << bytes->size() << ' ' << digest << '\n';
-        assert(digest == hash);
+    // The sequenced banks have no earlier reference; check their own tables.
+    for (const auto &[name, id, count] : {std::tuple{"fulton-lift.sep", 0x32u, 2u}, std::tuple{"fulton-foley.sep", 0x144u, 3u}}) {
+        using mgs::fulton_convert::get;
+        const auto &bank = bundle.at(name);
+        const std::uint32_t map = get(bank, 12), data = get(bank, 16), voices = get(bank, 20), end = get(bank, 28);
+        assert(get(bank, 0) == (0x5053u | id << 16) && get(bank, 4) == bank.size() && bank.size() % 0x800 == 0);
+        assert(get(bank, bank.size() - 4) == (0x5045u | id << 16) && (map - 0x30) / 32 == count && data - map == 1024);
+        unsigned samples = 0;
+        for (std::uint32_t key = 0; key < 128; ++key) {
+            const std::uint32_t sample = get(bank, map + key * 8);
+            if (sample == 0xffffffffu) continue;
+            ++samples;
+            assert(data + sample + 8 + get(bank, data + sample) <= voices && get(bank, map + key * 8 + 4) + 24 <= end - voices);
+        }
+        for (std::uint32_t cue = 0; cue < count; ++cue)
+            assert(get(bank, end + get(bank, 0x30 + cue * 32 + 12)) == 0x44514553u);
+        std::cout << name << ' ' << bank.size() << " bytes, " << samples << " samples\n";
+        assert(samples > 0);
+    }
+    if (argc > 2) {
+        std::filesystem::create_directories(argv[2]);
+        for (const auto &[name, bytes] : bundle)
+            std::ofstream(std::filesystem::path(argv[2]) / name, std::ios::binary)
+                .write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size()));
+        std::cout << "bundle written to " << argv[2] << '\n';
     }
     std::cout << "PW extraction, model, motion and balloon sound conversion passed\n";
 }

@@ -163,20 +163,38 @@ inline bool prepare_catalog(psprecomp::Runtime &runtime) {
     return true;
 }
 
-// The SHDS sound table (header +0x34, 8 bytes an id) types 0x272 as ATRAC3plus
-// (05 01 01 40 00 01 00 00) and 0x273 as an ADPCM effect (03 01 01 40 00 00 00
-// 00); sound2 0x5440 puts byte 0's low nibble into the play id. Type 5 effects
+inline std::uint32_t bank_word(std::span<const std::uint8_t> bytes, std::size_t at) {
+    return at + 4 > bytes.size() ? 0u
+        : std::uint32_t(bytes[at]) | std::uint32_t(bytes[at + 1]) << 8u | std::uint32_t(bytes[at + 2]) << 16u |
+          std::uint32_t(bytes[at + 3]) << 24u;
+}
+inline std::uint32_t cue_count(std::span<const std::uint8_t> bytes) {
+    return (bank_word(bytes, 12) - bank_word(bytes, 8)) / 32u;
+}
+// A bank whose cues are note sequences over a 128-entry key map (PW's common
+// effects, PO's segrp_70_stage_glass) rather than direct ADPCM samples.
+inline bool sequenced(std::span<const std::uint8_t> bytes) {
+    return bank_word(bytes, 16) - bank_word(bytes, 12) == 128u * 8u && bank_word(bytes, 0x34) == 0u;
+}
+
+// The SHDS sound table (header +0x34, 8 bytes an id) gives each sound a type
+// in byte 0's low nibble, which sound2 0x5440 puts into the play id: 0 a note
+// sequence (0x40010100, as the glass sound 0x253), 3 an ADPCM effect
+// (0x40010103), 5 ATRAC3plus. It types 0x272 as ATRAC3plus; type 5 effects
 // share voices 0x1C-0x21 with one playing at a time (sound2 0x2D2D0 = 1), so
-// our ADPCM 0x272, started beside the balloon 0x271, took the balloon's voice
-// and then failed ATRAC setup: neither played. No stock bank uses 0x272.
+// an ADPCM 0x272 started beside the balloon 0x271 took the balloon's voice
+// and then failed ATRAC setup: neither played. No stock bank uses 0x272. So
+// each of our sounds gets the type its own bank's cues have.
 template<class Memory>
-void retype_lift(Memory &memory) {
+void retype(Memory &memory, std::uint32_t sound, std::uint32_t count, std::span<const std::uint8_t> bytes) {
     const auto header = catalog(memory);
     const auto cues = memory.load32(header + 0x14u);
-    const auto to = (cues ? cues : header + 0x34u) + kLiftSound * 8u;
-    if (!memory.contains(to, 16u) || memory.load32(kShds) != 0x53444853u) return;
-    memory.store32(to, memory.load32(to + 8u));
-    memory.store32(to + 4u, memory.load32(to + 12u));
+    const auto to = (cues ? cues : header + 0x34u) + sound * 8u;
+    if (!memory.contains(to, count * 8u) || memory.load32(kShds) != 0x53444853u) return;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        memory.store32(to + i * 8u, sequenced(bytes) ? 0x40010100u : 0x40010103u);
+        memory.store32(to + i * 8u + 4u, 0u);
+    }
 }
 
 inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx,
@@ -185,7 +203,9 @@ inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
         foley_current = false;
         std::cerr << "[fulton] private audio catalogue unavailable; extra cues disabled" << std::endl;
     }
-    if (!lift_bank.empty()) retype_lift(runtime.memory());
+    if (!lift_bank.empty()) retype(runtime.memory(), kLiftSound, 2u, lift_bank);
+    if (!foley_bank.empty() && catalog(runtime.memory()) == catalog_address && catalog_address)
+        retype(runtime.memory(), kFoleySound, fulton_audio_catalog::kSounds, foley_bank);
     prepare_bank(runtime, ctx, bank, current, kKey, 0x31u, [&runtime, next](auto &context) {
         prepare_bank(runtime, context, lift_bank, lift_current, kLiftKey, 0x32u,
             [&runtime, next](auto &loaded) {
@@ -239,6 +259,8 @@ void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t p
           std::uint32_t sound = kSound) {
     const bool foley = sound >= kFoleySound && sound < kFoleySound + fulton_audio_catalog::kSounds;
     if (!(sound == kSound ? current : foley ? foley_current : lift_current)) { next(ctx); return; }
+    // A bank may hold fewer cues than its ids (no soldier grunt from a PSP disc).
+    if (foley && sound - kFoleySound >= cue_count(foley_bank)) { next(ctx); return; }
     if (portablekit::hle_extension::env("FULTON_SOUND_2D")) position = 0;
     const std::uint32_t id = sound == kSound ? 0x31u : foley ? fulton_audio_catalog::kBank : 0x32u;
     const auto &bytes = sound == kSound ? bank : foley ? foley_bank : lift_bank;
@@ -327,7 +349,7 @@ inline void install(psprecomp::Runtime &) {
     bank = load("fulton.sep", 0x31u, 0x8000u);
     lift_bank = load("fulton-lift.sep", 0x32u, 0x11000u);
     foley_bank = load("fulton-foley.sep", fulton_audio_catalog::kBank, fulton_audio_catalog::kCapacity);
-    if (!foley_bank.empty() && !valid_foley(foley_bank)) {
+    if (!foley_bank.empty() && !sequenced(foley_bank) && !valid_foley(foley_bank)) {
         std::cerr << "[fulton] fulton-foley.sep has invalid cue/sample tables" << std::endl;
         foley_bank.clear();
     }

@@ -306,6 +306,13 @@ int main(int argc, char **argv) {
     // Appended ids exceed E540's hard-coded bound. Use the same listener and
     // positional sound2 calls directly, preserving arguments across returns.
     mgs::fulton_sound::foley_current = true;
+    mgs::fulton_sound::foley_bank.assign(0x100, 0); // One cue: records 0x30..0x50.
+    mgs::fulton_sound::foley_bank[8] = 0x30;
+    mgs::fulton_sound::foley_bank[12] = 0x50;
+    returned = false;
+    mgs::fulton_sound::play(memory, context, work + 0x30u,
+                            [&](auto &) { returned = true; }, mgs::fulton_sound::kFoleySound + 1);
+    assert(returned && guest_calls.empty()); // The bank holds no second cue.
     returned = false;
     mgs::fulton_sound::play(memory, context, work + 0x30u,
                             [&](auto &) { returned = true; }, mgs::fulton_sound::kFoleySound);
@@ -341,8 +348,17 @@ int main(int argc, char **argv) {
     memory.words[shds272 + 4] = 0x0100u;
     memory.words[shds272 + 8] = 0x40010103u;
     memory.words[shds272 + 12] = 0;
-    mgs::fulton_sound::retype_lift(memory);
+    // Each sound takes the type of its bank's cues: direct ADPCM, or note
+    // sequences over a 128-entry key map.
+    std::vector<std::uint8_t> direct(0x100), notes(0x500);
+    direct[8] = 0x30; direct[12] = 0x70; direct[16] = 0x80; direct[0x36] = 1; direct[0x37] = 1;
+    notes[8] = 0x30; notes[12] = 0x90; notes[16] = 0x90; notes[17] = 4;
+    assert(!mgs::fulton_sound::sequenced(direct) && mgs::fulton_sound::cue_count(direct) == 2);
+    assert(mgs::fulton_sound::sequenced(notes) && mgs::fulton_sound::cue_count(notes) == 3);
+    mgs::fulton_sound::retype(memory, 0x272u, 2u, direct);
     assert(memory.load32(shds272) == 0x40010103u && memory.load32(shds272 + 4) == 0);
+    mgs::fulton_sound::retype(memory, 0x272u, 2u, notes);
+    assert(memory.load32(shds272) == 0x40010100u && memory.load32(shds272 + 8) == 0x40010100u);
     std::vector<std::uint8_t> sound_bank(0x800);
     sound_bank[0] = 'S'; sound_bank[1] = 'P'; sound_bank[2] = 0x32; sound_bank[5] = 8;
     sound_bank[0x7fc] = 'E'; sound_bank[0x7fd] = 'P'; sound_bank[0x7fe] = 0x32;

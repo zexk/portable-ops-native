@@ -1,6 +1,8 @@
 #pragma once
 
 // Peace Walker PSP Fulton resources to the port's converted bundle files.
+#include "pw_slot.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -112,6 +114,59 @@ inline Bytes bank(std::span<const std::uint8_t> pw, std::uint16_t id) {
     return out;
 }
 
+// Chosen cues of a PW sequenced effects bank as a small bank of their own.
+// Such a bank (PW's resident segrp_0_jochu_2other, PO's own
+// segrp_70_stage_glass) has cue records from +0x08, a 128-entry key map of
+// {sample, voice} offsets at +0x0C, samples ({length, format} + ADPCM) at
+// +0x10, 24-byte voices at +0x14 and, after them at +0x1C, one "SEQD" note
+// sequence per cue, found through the cue's +0x0C. In a sequence, 0x8A n
+// selects key map entry n. PO's sound driver plays the same form, so cues,
+// sequences, voices and samples are copied as they are; only the samples
+// those cues select are kept and the offsets to them renumbered.
+inline Bytes cues(std::span<const std::uint8_t> pw, std::uint16_t id, std::initializer_list<std::uint32_t> wanted,
+                  std::uint32_t limit) {
+    const std::uint32_t size = get(pw, 4), first = get(pw, 8), map = get(pw, 12), data = get(pw, 16),
+                        voices = get(pw, 20), end = get(pw, 28);
+    if (pw[0] != 'S' || pw[1] != 'P' || first != 0x30 || first >= map || data - map != 128 * 8 || data > voices ||
+        voices > end || end > size || size > pw.size() || (end - voices) % 24)
+        throw std::runtime_error("Not a PW sequenced sound bank");
+    Bytes records, keys(128 * 8, 0xff), samples, sequences;
+    for (auto cue : wanted) {
+        if (cue >= (map - first) / 32) throw std::runtime_error("PW sound bank lacks a cue");
+        const auto record = pw.subspan(first + cue * 32u, 32);
+        const std::uint64_t at = std::uint64_t(end) + get(record, 12), length = 8ull + get(pw, at + 4);
+        if (get(record, 4) != 0 || get(pw, at) != 0x44514553u || at + length > size)
+            throw std::runtime_error("PW sound cue is not a note sequence");
+        for (std::uint64_t i = at + 8; i + 1 < at + length; ++i) {
+            const std::uint32_t key = pw[i + 1];
+            if (pw[i] != 0x8a || key >= 128 || get(keys, key * 8) != 0xffffffffu || get(pw, map + key * 8) == 0xffffffffu)
+                continue;
+            const std::uint64_t sample = std::uint64_t(data) + get(pw, map + key * 8), bytes = 8ull + get(pw, sample);
+            if (sample + bytes > voices || get(pw, map + key * 8 + 4) + 24 > end - voices)
+                throw std::runtime_error("PW sound sample is outside its bank");
+            put(keys, key * 8, std::uint32_t(samples.size()));
+            put(keys, key * 8 + 4, get(pw, map + key * 8 + 4));
+            samples.insert(samples.end(), pw.begin() + sample, pw.begin() + sample + bytes);
+        }
+        records.insert(records.end(), record.begin(), record.end());
+        put(records, records.size() - 32 + 12, std::uint32_t(sequences.size()));
+        sequences.insert(sequences.end(), pw.begin() + at, pw.begin() + at + length);
+    }
+    Bytes out{'S', 'P', std::uint8_t(id), std::uint8_t(id >> 8)};
+    const std::uint32_t new_map = 0x30 + std::uint32_t(records.size()), new_data = new_map + 128 * 8,
+                        new_voices = new_data + std::uint32_t(samples.size()), new_end = new_voices + (end - voices),
+                        new_size = (new_end + std::uint32_t(sequences.size()) + 4 + 0x7ffu) & ~0x7ffu;
+    if (new_size > limit) throw std::runtime_error("PW sound cues do not fit PO's bank");
+    append(out, {new_size, 0x30, new_map, new_data, new_voices, new_voices, new_end});
+    out.insert(out.end(), pw.begin() + 0x20, pw.begin() + 0x30);
+    for (const Bytes *part : {&records, &keys, &samples}) out.insert(out.end(), part->begin(), part->end());
+    out.insert(out.end(), pw.begin() + voices, pw.begin() + end);
+    out.insert(out.end(), sequences.begin(), sequences.end());
+    out.resize(new_size - 4);
+    out.insert(out.end(), {'E', 'P', std::uint8_t(id), std::uint8_t(id >> 8)});
+    return out;
+}
+
 // PO's 19-joint humanoid: joint name hashes and each joint's parent (255 for
 // the root), as every PO soldier and player motion archive lists them. PW
 // names its joints differently but orders and parents them the same.
@@ -163,6 +218,34 @@ inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::u
     for (const auto &block : blocks) { append(out, {at, std::uint32_t(block.size())}); at += std::uint32_t(block.size()); }
     out.resize(body_at);
     for (const auto &block : blocks) out.insert(out.end(), block.begin(), block.end());
+    return out;
+}
+// The whole converted bundle from a PW PSP disc image, as file name -> bytes.
+// Models, packs and the lift motion are required; a sound bank or the
+// placement motion the disc does not yield in a usable form is left out.
+// A name can occur in several stage entities, not all of them usable (two of
+// this disc's five snake_coop archives are not): the first that converts wins.
+inline std::map<std::string, Bytes> bundle(portablekit::IsoImage &iso) {
+    const std::uint32_t keys[] = {0x14f66bb7u, 0x14430af6u, 0x13f66bb7u, 0x13430af6u};
+    auto out = models(pw_slot::extract(iso, keys));
+    const auto take = [&out](const char *file, auto make) {
+        if (out.contains(file)) return;
+        try { out[file] = make(); } catch (const std::runtime_error &) {}
+    };
+    pw_slot::stage_files(iso, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
+        // enedam clips 101 and 103: the yank and the hang. snake_coop 156: the attach.
+        if (name == "enedam.mtar") take("fult_enemy.mtar", [&] { return mtar(bytes, {101, 103}); });
+        if (name == "snake_coop.mtar") take("fult_place.mtar", [&] { return mtar(bytes, {156}); });
+        if (name == "segrp_75_furuton.sep") take("fulton.sep", [&] { return bank(bytes, 0x31); });
+        if (name == "segrp_0_jochu_2other.sep") {
+            // Sounds 0x9D3B and 0x9D3C (yank, release) as PO bank 0x32; attach
+            // effects 0x9CF3, 0x9D1D and 0x9CF8 as the port's private bank.
+            take("fulton-lift.sep", [&] { return cues(bytes, 0x32, {104, 105}, 0x11000); });
+            take("fulton-foley.sep", [&] { return cues(bytes, 0x144, {32, 74, 37}, 0x9000); });
+        }
+        return out.size() == 9;
+    });
+    if (!out.contains("fult_enemy.mtar")) throw std::runtime_error("PW disc lacks the soldier lift motion");
     return out;
 }
 } // namespace mgs::fulton_convert
