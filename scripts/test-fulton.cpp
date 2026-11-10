@@ -213,13 +213,17 @@ int main(int argc, char **argv) {
     memory.words[engine + 0x258f8c] = node;
     memory.words[node + 0x10] = component;
     memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(800.0f);
+    assert(nearest(memory, player).work == 0); // Yaw 0 looks along +Z; he lies along +X.
+    memory.words[player + 0x130] = 0xc000u << 16;
+    assert(nearest(memory, player).work == 0); // Back turned.
+    memory.words[player + 0x130] = 0x2000u << 16;
+    assert(nearest(memory, player).work == work); // 45 degrees off is inside the cone.
+    memory.words[player + 0x130] = 0x4000u << 16;
     assert(nearest(memory, player).work == work);
-    assert(select(memory, player).work == 0); // The game does not offer a grab.
-    memory.words[player + grab_flags] = grab_reach;
-    assert(select(memory, player).work == work);
-    memory.words[player + grab_flags] = 0;
-    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(1000.0f);
-    assert(nearest(memory, player).work == 0); // Past grab reach.
+    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(1150.0f);
+    assert(nearest(memory, player).work == work);
+    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(1250.0f);
+    assert(nearest(memory, player).work == 0); // Past reach.
     memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(3000.0f);
     assert(nearest(memory, player).work == 0);
     memory.words[work + 0x30] = 0x7fc00000; // NaN must never win selection.

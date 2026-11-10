@@ -20,12 +20,16 @@ constexpr std::uint32_t engine = 0x08804000u;
 constexpr std::uint32_t update = engine + 0xc488cu;
 // Engine pad bit, not the sceCtrl one (the engine remaps L/R to 0x400/0x800).
 constexpr std::uint32_t triangle = 0x1000u;
-// Live ULUS-10202 1.02: player +0xB98 bit 0x10 is the game's own "downed
-// soldier in grab reach" test. It set within about 700 units while facing an
-// unconscious soldier, armed or not, cleared by 830, on turning away and
-// while dragging. Whether it covers a prone hold-up is unverified, so that
-// case is accepted on its own state inside the same reach.
-constexpr std::uint32_t grab_flags = 0xb98u, grab_reach = 0x10u;
+// Reach, in world units from the player to the soldier, and how squarely the
+// player must face him. The game's own grab test (player +0xB98 bit 0x10,
+// live ULUS-10202 1.02) sets within about 700 while facing an unconscious
+// soldier and clears by 830 or on turning away; Fulton reaches a little
+// further, so it measures both itself. The player's yaw is the high half of
+// +0x130, 0x10000 a full turn, pointing along (sin, cos) on world X and Z:
+// in live samples it matched the direction of travel while running.
+// ponytail: both numbers are picked by feel. Replace them with PW's own
+// reach and cone once a PW trace of its Fulton prompt test has measured them.
+constexpr float reach = 1200.0f, facing = 0.5f; // cosine: within 60 degrees
 constexpr std::array<std::uint32_t, 16> notify_shape{
     0x27bdffd0, 0xafbf0020, 0x00803021, 0x03a02821,
     0x8c821438, 0x14400004, 0x00402021, 0x8fbf0020,
@@ -104,8 +108,7 @@ bool eligible(const Memory &memory, Target target) {
 template<class Memory>
 Target nearest(const Memory &memory, std::uint32_t player) {
     Target best;
-    // Just past the 830 units where the game's grab test was seen to clear.
-    float distance = 900.0f * 900.0f;
+    float distance = reach * reach;
     unsigned remaining = 4096;
     for (unsigned bucket = 0; bucket < 16 && remaining; ++bucket) {
         auto node = memory.load32(engine + 0x258f8cu + 12u * bucket);
@@ -117,12 +120,15 @@ Target nearest(const Memory &memory, std::uint32_t player) {
                 Target target{memory.load32(component + 0x24u), memory.load32(component + 4u)};
                 if (same(memory, target) && memory.load32(target.work + 0x10u) == component) {
                     float squared = 0;
+                    std::array<float, 3> to{};
                     for (unsigned axis = 0; axis < 3; ++axis) {
-                        const float delta = std::bit_cast<float>(memory.load32(player + 0x100u + axis * 4u)) -
-                                            std::bit_cast<float>(memory.load32(target.work + 0x30u + axis * 4u));
-                        squared += delta * delta;
+                        to[axis] = std::bit_cast<float>(memory.load32(target.work + 0x30u + axis * 4u)) -
+                                   std::bit_cast<float>(memory.load32(player + 0x100u + axis * 4u));
+                        squared += to[axis] * to[axis];
                     }
-                    if (std::isfinite(squared) && squared < distance) {
+                    const float yaw = float(memory.load32(player + 0x130u) >> 16) * (6.2831853f / 65536.0f);
+                    const bool faced = std::sin(yaw) * to[0] + std::cos(yaw) * to[2] >= facing * std::sqrt(squared);
+                    if (std::isfinite(squared) && squared < distance && faced) {
                         if (eligible(memory, target)) { best = target; distance = squared; }
                         else if (memory.load32(target.work + 0x1850u) >= 20u &&
                                  memory.load32(target.work + 0x1850u) < 54u) {
@@ -143,15 +149,6 @@ Target nearest(const Memory &memory, std::uint32_t player) {
         }
     }
     return best;
-}
-
-// The soldier a Triangle press recovers: the one the game would let the
-// player grab, or a prone held-up one in the same reach.
-template<class Memory>
-Target select(const Memory &memory, std::uint32_t player) {
-    const auto target = nearest(memory, player);
-    if (!target.work) return {};
-    return (memory.load32(player + grab_flags) & grab_reach) != 0u || held_up(memory, target) ? target : Target{};
 }
 
 template<class Memory>
@@ -267,7 +264,7 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
         resume(ctx);
         return;
     }
-    const auto target = select(memory, player);
+    const auto target = nearest(memory, player);
     if (!target.work) { resume(ctx); return; }
     if (fulton_assets::enabled()) {
         busy = true;

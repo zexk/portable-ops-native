@@ -200,8 +200,8 @@ a Master Collection installation does not exist yet.
 ## Optional Fulton prototype (PO only)
 
 Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **Triangle**
-beside an unconscious ordinary soldier, where the game would let you grab
-them, to recover them without a truck. Disabled unless explicitly
+within about 1.2 m of an unconscious ordinary soldier, facing them, to
+recover them without a truck. Disabled unless explicitly
 enabled; PO+ and online play are excluded.
 
 This first mechanic prototype performs immediate recovery using PO's original
