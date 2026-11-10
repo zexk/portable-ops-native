@@ -14,6 +14,7 @@
 // carry are exactly entries 1, 2, 3, 5, 9, 12, 14 and 18, and n01, n02, n03,
 // n05, n09, n12, n14 and n18 all exist. Not confirmed against the game.
 
+#include "profile.hpp"
 #include "psprecomp/runtime.hpp"
 
 #include <array>
@@ -55,7 +56,22 @@ inline psprecomp::Runtime::RecompiledFunction original_request = nullptr;
 
 inline void request(psprecomp::CorpusRuntime &runtime, psprecomp::AllegrexContext &ctx) {
     // Bounded: stage names are at most a dozen characters.
-    std::string name = static_cast<psprecomp::Runtime &>(runtime).memory().read_c_string(ctx.gpr[4], 32u);
+    auto &memory = static_cast<psprecomp::Runtime &>(runtime).memory();
+    std::string name = memory.read_c_string(ctx.gpr[4], 32u);
+    // <prefix>_STAGE_REDIRECT=from=to (research only): the request for stage
+    // `from` loads `to`, a name no longer than it, written over the game's.
+    // The stage starts with whatever state the game has, not a mission's.
+    if (const char *redirect = portablekit::env("STAGE_REDIRECT")) {
+        const std::string_view rule = redirect;
+        const auto equals = rule.find('=');
+        if (equals != std::string_view::npos && rule.substr(0, equals) == name &&
+            rule.size() - equals - 1u <= name.size()) {
+            name = rule.substr(equals + 1u);
+            for (std::size_t i = 0; i <= name.size(); ++i)
+                memory.store8(ctx.gpr[4] + static_cast<std::uint32_t>(i), static_cast<std::uint8_t>(name.c_str()[i]));
+            std::cout << "[presence] stage request redirected" << std::endl;
+        }
+    }
     if (name != state.stage) {
         state.stage = std::move(name);
         ++state.changes;
