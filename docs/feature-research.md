@@ -441,3 +441,18 @@ game speed during steady play, with no renderer errors logged. PO build,
 renderer helper, texture-pack and interpolation tests pass. Other games,
 platforms, swizzled framebuffer views and CLUT4/CLUT8 framebuffer views
 remain unverified or unsupported by the new path.
+
+## 18. L plus D-pad movement with stick swapping
+
+PO ULUS-10202 1.02, 2026-11-10. Holding L plus D-pad left or right caused
+an animation loop with slow sliding. The user reproduced it on the release
+build and confirmed disabling Controls > Swap sticks in first person
+stopped it. The hook treated action flag `0x16` as sufficient to swap, but
+the game's locomotion code also sets it outside first person for native
+D-pad movement. First-person state (`0xBA` or `7`) is now checked before
+`0x16`, retaining the game's other stick-selection conditions.
+
+`scripts/test-camera.cpp` checks native D-pad movement stays unswapped,
+first-person swapping still activates, and native control settings and
+special-state exceptions remain respected. The user confirmed the fix on
+Linux with the regular save and stick swapping enabled.

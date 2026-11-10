@@ -58,5 +58,35 @@ int main() {
     step(false, 25, false, 125u); // Manual orbit still works.
     step(false, 0, true, 0u); // The recentre button still works.
     step(true, 0, false, 100u); // Re-enabling restores the stage's follow rule.
-    std::cout << "Camera follow, manual orbit, recentre and rule restoration checks passed\n";
+
+    constexpr std::uint32_t player = 0x08810000u, control = 0x08812000u;
+    constexpr std::uint32_t flags = 0x08813000u, globals = 0x08814000u, settings = 0x08815000u;
+    mgs::camera_state.addresses.action_flags = flags;
+    mgs::camera_state.addresses.globals = globals;
+    memory.store32(player + 0x4cu, control);
+    memory.store32(control + 0x28u, 0u);
+    memory.store32(globals, settings);
+    memory.store32(settings + 0x6cu, 0x200u);
+    const auto flag = [&](unsigned id, bool on) {
+        const auto word = flags + 4u * (id >> 5u);
+        const auto bit = 1u << (id & 31u);
+        memory.store32(word, on ? memory.load32(word) | bit : memory.load32(word) & ~bit);
+    };
+    flag(0x16u, true);
+    assert(!mgs::first_person_swapped(memory, player)); // Native L + D-pad movement.
+    flag(0xbau, true);
+    assert(mgs::first_person_swapped(memory, player)); // The same selector in first person.
+    flag(0x16u, false);
+    flag(0x4fu, true);
+    memory.store32(player + 0x724u, 0x200u);
+    assert(mgs::first_person_swapped(memory, player)); // Held first-person button.
+    memory.store32(player + 0x724u, 0u);
+    assert(!mgs::first_person_swapped(memory, player)); // The game's chooser keeps sticks native.
+    memory.store32(player + 0x724u, 0x200u);
+    memory.store32(settings + 4u, 0x80000u);
+    assert(!mgs::first_person_swapped(memory, player)); // Native control setting disables the swap.
+    memory.store32(settings + 4u, 0u);
+    flag(0x148u, true);
+    assert(!mgs::first_person_swapped(memory, player)); // Special-state exception still wins.
+    std::cout << "Camera follow and first-person stick selection checks passed\n";
 }

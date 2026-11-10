@@ -164,8 +164,10 @@ inline void feed_camera_stick(psprecomp::Runtime &runtime, const psprecomp::Alle
 [[nodiscard]] inline bool first_person_swapped(psprecomp::GuestMemory &memory, std::uint32_t player) {
     const auto flag = [&](std::uint32_t f) { return action(memory, player, f); };
     if (flag(0x148u)) return false;
-    if (flag(0x16u)) return true;
+    // 0x16 also selects the camera stick for native D-pad locomotion outside
+    // first person. Swapping there makes L + D-pad fight that movement state.
     if (!flag(0xbau) && !flag(7u)) return false;
+    if (flag(0x16u)) return true;
     const std::uint32_t globals = memory.load32(camera_state.addresses.globals);
     if ((memory.load32(globals + 4u) & 0x80000u) != 0u) return false;
     return (memory.load32(player + 0x724u) & memory.load32(globals + 0x6cu)) != 0u || !flag(0x4fu);
