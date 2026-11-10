@@ -171,8 +171,8 @@ inline std::uint32_t bank_word(std::span<const std::uint8_t> bytes, std::size_t 
 inline std::uint32_t cue_count(std::span<const std::uint8_t> bytes) {
     return (bank_word(bytes, 12) - bank_word(bytes, 8)) / 32u;
 }
-// A bank whose cues are note sequences over a 128-entry key map (PW's common
-// effects, PO's segrp_70_stage_glass) rather than direct ADPCM samples.
+// A bank starting with note sequences over a 128-entry key map (PW's common
+// effects, PO's segrp_70_stage_glass). Later cues may be direct ADPCM.
 inline bool sequenced(std::span<const std::uint8_t> bytes) {
     return bank_word(bytes, 16) - bank_word(bytes, 12) == 128u * 8u && bank_word(bytes, 0x34) == 0u;
 }
@@ -192,7 +192,9 @@ void retype(Memory &memory, std::uint32_t sound, std::uint32_t count, std::span<
     const auto to = (cues ? cues : header + 0x34u) + sound * 8u;
     if (!memory.contains(to, count * 8u) || memory.load32(kShds) != 0x53444853u) return;
     for (std::uint32_t i = 0; i < count; ++i) {
-        memory.store32(to + i * 8u, sequenced(bytes) ? 0x40010100u : 0x40010103u);
+        const auto record = bank_word(bytes, 8) + i * 32u;
+        const bool notes = sequenced(bytes) && bank_word(bytes, record + 4) == 0;
+        memory.store32(to + i * 8u, notes ? 0x40010100u : 0x40010103u);
         memory.store32(to + i * 8u + 4u, 0u);
     }
 }
@@ -262,7 +264,7 @@ void play(const Memory &memory, psprecomp::AllegrexContext &ctx, std::uint32_t p
           std::uint32_t sound = kSound) {
     const bool foley = sound >= kFoleySound && sound < kFoleySound + fulton_audio_catalog::kSounds;
     if (!(sound == kSound ? current : foley ? foley_current : lift_current)) { next(ctx); return; }
-    // A bank may hold fewer cues than its ids (no soldier grunt from a PSP disc).
+    // Older imported bundles may hold only three foley cues, without the grunt.
     if (foley && sound - kFoleySound >= cue_count(foley_bank)) { next(ctx); return; }
     if (portablekit::hle_extension::env("FULTON_SOUND_2D")) position = 0;
     const std::uint32_t id = sound == kSound ? 0x31u : foley ? fulton_audio_catalog::kBank : 0x32u;

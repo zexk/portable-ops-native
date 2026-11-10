@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
         assert(digest == hash);
     }
     // The sequenced banks have no earlier reference; check their own tables.
-    for (const auto &[name, id, count] : {std::tuple{"fulton-lift.sep", 0x32u, 2u}, std::tuple{"fulton-foley.sep", 0x144u, 3u}}) {
+    for (const auto &[name, id, count] : {std::tuple{"fulton-lift.sep", 0x32u, 2u}, std::tuple{"fulton-foley.sep", 0x144u, 4u}}) {
         using mgs::fulton_convert::get;
         const auto &bank = bundle.at(name);
         const std::uint32_t map = get(bank, 12), data = get(bank, 16), voices = get(bank, 20), end = get(bank, 28);
@@ -163,10 +163,32 @@ int main(int argc, char **argv) {
             ++samples;
             assert(data + sample + 8 + get(bank, data + sample) <= voices && get(bank, map + key * 8 + 4) + 24 <= end - voices);
         }
-        for (std::uint32_t cue = 0; cue < count; ++cue)
+        for (std::uint32_t cue = 0; cue < (id == 0x144 ? 3u : count); ++cue)
             assert(get(bank, end + get(bank, 0x30 + cue * 32 + 12)) == 0x44514553u);
         std::cout << name << ' ' << bank.size() << " bytes, " << samples << " samples\n";
         assert(samples > 0);
+    }
+    {
+        using namespace mgs::fulton_convert;
+        const std::uint32_t key[] = {0x3716b682};
+        const auto voice = mgs::pw_slot::extract(iso, key).at(key[0]);
+        assert(psprecomp::sha256_bytes(voice) == "9ea18e66605bd548673166c356394dd2040c0055aa05c1cda276690d2bc72bf3");
+        const auto &bank = bundle.at("fulton-foley.sep");
+        const auto source_key = get(voice, 12) + get(voice, 0x30 + 6 * 32 + 8);
+        const auto target_key = get(bank, 12) + get(bank, 0x30 + 3 * 32 + 8);
+        const auto source_sample = get(voice, 16) + get(voice, source_key);
+        const auto target_sample = get(bank, 16) + get(bank, target_key);
+        const auto size = 8 + get(voice, source_sample);
+        assert(get(bank, 0x30 + 3 * 32 + 4) == 0x01010100 && get(bank, 0x30 + 3 * 32 + 24) == 248);
+        assert(bank.size() <= 0x9000 && get(bank, target_sample + 4) == 0x3d8605b6);
+        assert(std::equal(voice.begin() + source_sample, voice.begin() + source_sample + size, bank.begin() + target_sample));
+        const auto source_voice = get(voice, 24) + get(voice, source_key + 4);
+        const auto target_voice = get(bank, 24) + get(bank, target_key + 4);
+        assert(std::equal(voice.begin() + source_voice, voice.begin() + source_voice + 24, bank.begin() + target_voice));
+        auto broken = voice;
+        put(broken, get(broken, 4) - 4, 0);
+        try { cues(bank, 0x144, {0, 1, 2}, 0x9000, broken); assert(false); } catch (const std::runtime_error &) {}
+        std::cout << "PSP grunt sample, rate and voice preserved byte for byte\n";
     }
     if (argc > 2) {
         std::filesystem::create_directories(argv[2]);

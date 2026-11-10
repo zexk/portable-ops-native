@@ -202,14 +202,16 @@ inline Bytes bank(std::span<const std::uint8_t> pw, std::uint16_t id) {
 // selects key map entry n. PO's sound driver plays the same form, so cues,
 // sequences, voices and samples are copied as they are; only the samples
 // those cues select are kept and the offsets to them renumbered.
+// An optional PSP grunt bank adds its direct ADPCM cue through a free key.
 inline Bytes cues(std::span<const std::uint8_t> pw, std::uint16_t id, std::initializer_list<std::uint32_t> wanted,
-                  std::uint32_t limit) {
+                  std::uint32_t limit, std::span<const std::uint8_t> grunt = {}) {
     const std::uint32_t size = get(pw, 4), first = get(pw, 8), map = get(pw, 12), data = get(pw, 16),
                         voices = get(pw, 20), end = get(pw, 28);
     if (pw[0] != 'S' || pw[1] != 'P' || first != 0x30 || first >= map || data - map != 128 * 8 || data > voices ||
         voices > end || end > size || size > pw.size() || (end - voices) % 24)
         throw std::runtime_error("Not a PW sequenced sound bank");
     Bytes records, keys(128 * 8, 0xff), samples, sequences;
+    Bytes instruments(pw.begin() + voices, pw.begin() + end);
     for (auto cue : wanted) {
         if (cue >= (map - first) / 32) throw std::runtime_error("PW sound bank lacks a cue");
         const auto record = pw.subspan(first + cue * 32u, 32);
@@ -231,15 +233,42 @@ inline Bytes cues(std::span<const std::uint8_t> pw, std::uint16_t id, std::initi
         put(records, records.size() - 32 + 12, std::uint32_t(sequences.size()));
         sequences.insert(sequences.end(), pw.begin() + at, pw.begin() + at + length);
     }
+    if (!grunt.empty()) {
+        // ULES01372 1.01, SLOT 0x3716B682, bank 0xD67 cue 6: the user
+        // confirmed this against MC's yank grunt. Keep its ADPCM and voice
+        // unchanged, alongside the three sequenced attachment cues.
+        constexpr std::uint32_t record = 0x30 + 6 * 32;
+        const std::uint64_t size = get(grunt, 4), map = get(grunt, 12), data = get(grunt, 16),
+                            voices = get(grunt, 24), end = get(grunt, 28);
+        if (get(grunt, 0) != 0x0d675053u || size > grunt.size() || size < 4 ||
+            get(grunt, size - 4) != 0x0d675045u || get(grunt, 8) != 0x30 || map < record + 32 ||
+            data < map || voices < data || end < voices || end > size || get(grunt, record + 4) != 0x01010100u)
+            throw std::runtime_error("Unsupported PSP soldier voice bank");
+        const std::uint64_t index = get(grunt, record + 8);
+        if (index % 8 || index + 8 > data - map) throw std::runtime_error("Invalid PSP grunt index");
+        const std::uint64_t sample = data + get(grunt, map + index), voice = voices + get(grunt, map + index + 4),
+                            length = get(grunt, sample);
+        if (sample + 8 + length > voices || !length || length % 16 || voice + 24 > end)
+            throw std::runtime_error("Invalid PSP grunt sample or voice");
+        unsigned key = 0;
+        while (key < 128 && get(keys, key * 8) != 0xffffffffu) ++key;
+        if (key == 128) throw std::runtime_error("No free sound key for PSP grunt");
+        put(keys, key * 8, std::uint32_t(samples.size()));
+        put(keys, key * 8 + 4, std::uint32_t(instruments.size()));
+        samples.insert(samples.end(), grunt.begin() + sample, grunt.begin() + sample + 8 + length);
+        instruments.insert(instruments.end(), grunt.begin() + voice, grunt.begin() + voice + 24);
+        records.insert(records.end(), grunt.begin() + record, grunt.begin() + record + 32);
+        put(records, records.size() - 32 + 8, key * 8);
+    }
     Bytes out{'S', 'P', std::uint8_t(id), std::uint8_t(id >> 8)};
     const std::uint32_t new_map = 0x30 + std::uint32_t(records.size()), new_data = new_map + 128 * 8,
-                        new_voices = new_data + std::uint32_t(samples.size()), new_end = new_voices + (end - voices),
+                        new_voices = new_data + std::uint32_t(samples.size()), new_end = new_voices + std::uint32_t(instruments.size()),
                         new_size = (new_end + std::uint32_t(sequences.size()) + 4 + 0x7ffu) & ~0x7ffu;
     if (new_size > limit) throw std::runtime_error("PW sound cues do not fit PO's bank");
     append(out, {new_size, 0x30, new_map, new_data, new_voices, new_voices, new_end});
     out.insert(out.end(), pw.begin() + 0x20, pw.begin() + 0x30);
     for (const Bytes *part : {&records, &keys, &samples}) out.insert(out.end(), part->begin(), part->end());
-    out.insert(out.end(), pw.begin() + voices, pw.begin() + end);
+    out.insert(out.end(), instruments.begin(), instruments.end());
     out.insert(out.end(), sequences.begin(), sequences.end());
     out.resize(new_size - 4);
     out.insert(out.end(), {'E', 'P', std::uint8_t(id), std::uint8_t(id >> 8)});
@@ -314,7 +343,7 @@ inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
     std::vector<std::uint32_t> keys = {0x14f66bb7u, 0x14430af6u, 0x13f66bb7u, 0x13430af6u};
     // MC bank 0xD88 lives in SLOT under this resource key, not in stages.
     // Its PSP counterpart is bank 0xD67; bank ids differ between editions.
-    if (wide) keys.push_back(0x3716b682u);
+    keys.push_back(0x3716b682u);
     const auto resources = pw_slot::extract(source, keys);
     std::vector<fulton_audio_convert::Clip> foley;
     if (wide && (!resources.contains(0x3716b682u) || get(resources.at(0x3716b682u), 0) != 0x0d885053u))
@@ -347,7 +376,11 @@ inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
             // Sounds 0x9D3B and 0x9D3C (yank, release) as PO bank 0x32; attach
             // effects 0x9CF3, 0x9D1D and 0x9CF8 as the port's private bank.
             take("fulton-lift.sep", [&] { return cues(bytes, 0x32, {104, 105}, 0x11000); });
-            take("fulton-foley.sep", [&] { return cues(bytes, 0x144, {32, 74, 37}, 0x9000); });
+            take("fulton-foley.sep", [&] {
+                const auto voice = resources.find(0x3716b682u);
+                return cues(bytes, 0x144, {32, 74, 37}, 0x9000,
+                            voice == resources.end() ? std::span<const std::uint8_t>{} : voice->second);
+            });
         }
         return out.size() == 9;
     });

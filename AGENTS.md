@@ -33,7 +33,8 @@ Fulton has an experimental Game-tab toggle and a Game-tab import that
 converts a PW PSP disc image or Master Collection installation in the port
 itself (`pw_slot.hpp`, `fulton_convert.hpp`, `fulton_audio_convert.hpp`;
 `scripts/test-pw-slot.cpp` checks local sources). MC import includes the
-confirmed soldier grunt and encodes Ogg effects as PSP ADPCM. Its balloon
-uses 12 kHz to fit PO's existing 32 KiB bank. Donors load from memory in
+confirmed soldier grunt and encodes Ogg effects as PSP ADPCM. PSP import
+copies its confirmed grunt and voice unchanged alongside sequenced foleys.
+MC's balloon uses 12 kHz to fit PO's existing 32 KiB bank. Donors load from memory in
 every stage; no stage file is replaced. Both imports pass offline checks;
 the complete MC bundle and its Game-tab import still need live validation.

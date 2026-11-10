@@ -363,6 +363,13 @@ int main(int argc, char **argv) {
     assert(memory.load32(shds272) == 0x40010103u && memory.load32(shds272 + 4) == 0);
     mgs::fulton_sound::retype(memory, 0x272u, 2u, notes);
     assert(memory.load32(shds272) == 0x40010100u && memory.load32(shds272 + 8) == 0x40010100u);
+    // A direct grunt shares the PSP bank with sequenced attachment effects.
+    notes[0x30 + 2 * 32 + 5] = 1;
+    notes[0x30 + 2 * 32 + 6] = 1;
+    notes[0x30 + 2 * 32 + 7] = 1;
+    mgs::fulton_sound::retype(memory, 0x272u, 3u, notes);
+    assert(memory.load32(shds272) == 0x40010100u && memory.load32(shds272 + 8) == 0x40010100u);
+    assert(memory.load32(shds272 + 16) == 0x40010103u);
     std::vector<std::uint8_t> sound_bank(0x800);
     sound_bank[0] = 'S'; sound_bank[1] = 'P'; sound_bank[2] = 0x32; sound_bank[5] = 8;
     sound_bank[0x7fc] = 'E'; sound_bank[0x7fd] = 'P'; sound_bank[0x7fe] = 0x32;

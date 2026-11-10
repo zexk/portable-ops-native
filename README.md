@@ -173,8 +173,11 @@ root, `mgspw`, `MLG` or `disc0_rel`. It needs no PSP ISO. Its Ogg sounds are
 decoded in memory with `stb_vorbis` and encoded as PSP ADPCM. The 4.36-second
 balloon effect uses 12 kHz to fit PO's 32 KiB bank; other effects use
 44.1 kHz, including the confirmed ordinary-soldier yank grunt. PSP import
-keeps its original ATRAC3plus balloon and sequenced effects; its grunt
-remains absent.
+keeps its original ATRAC3plus balloon and sequenced effects. Its confirmed
+grunt is copied without re-encoding, at its native 15,750 Hz, into the same
+private bank as the three sequenced attachment cues. Their sound types are
+set per cue. The user confirmed the PSP grunt against the MC reference;
+the new mixed bank still needs an in-game check.
 
 `MGSPO_FULTON_STAGE_DIR` can override the bundle directory for developer
 tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
