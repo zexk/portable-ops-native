@@ -350,13 +350,14 @@ all its work in the first 2 ms after a vblank: flip to the buffer drawn
 last frame, draw the other buffer, read the pad, `sceGeDrawSync`, then
 wait (3 vblanks in play, 2 in menus). A finished picture is therefore
 shown one whole game frame after it was drawn: 50 ms in play, 33 ms in
-menus. Video > Show frames early (`video.present_at_draw_sync`, or
+menus. Game > Show frames early (`video.present_at_draw_sync`, or
 `MGSPO_PRESENT_AT_DRAW_SYNC=1`; PortableKit, off by default) shows
 it at the draw sync; the trace confirms one early present per frame and
 the user reports snappier input, most in menus. The pad is read after the
 draw, so input still waits one frame to be drawn.
 
-**That frame, without changing the game** (`MGSPO_PACE_AT_PAD_READ=1` with
+**That frame, without changing the game** (Game > Read the controller
+late, `video.pace_at_pad_read` or `MGSPO_PACE_AT_PAD_READ=1`, with
 Show frames early; PortableKit, off by default). In real time the loop is
 "read the pad, update, wait about 48 ms, flip, draw": the wait sits
 between the read and the picture made from it. Returning from the vblank
