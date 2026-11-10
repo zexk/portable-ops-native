@@ -343,3 +343,15 @@ removes the whole wait. Model (3 ms code, 1 ms margin), total delay:
 `CHECK_REPLAY` now also replays the newer frame through the carrying path at
 a factor just above 1 and counts pixels differing from its own picture.
 Not yet verified live or for physical button-to-screen latency.
+
+**A frame held by the game itself** (2026-11-10, ULUS-10202 1.02,
+`MGSPO_TRACE_PACING`). Apart from interpolation, the game's main loop does
+all its work in the first 2 ms after a vblank: flip to the buffer drawn
+last frame, draw the other buffer, read the pad, `sceGeDrawSync`, then
+wait (3 vblanks in play, 2 in menus). A finished picture is therefore
+shown one whole game frame after it was drawn: 50 ms in play, 33 ms in
+menus. `MGSPO_PRESENT_AT_DRAW_SYNC=1` (PortableKit, off by default) shows
+it at the draw sync; the trace confirms one early present per frame and
+the user reports snappier input, most in menus. The pad is read after the
+draw, so input still waits one frame to be drawn; that frame is the
+game's own and is not addressed. Physical latency remains unmeasured.
