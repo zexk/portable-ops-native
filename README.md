@@ -127,6 +127,19 @@ it once for all the stages that share it. Import stubs inside a module's code
 (`KCEJ_FS` has three) are dumped beside it as a `.stubs` file and kept out of
 its compiled code.
 
+## Peace Walker backport policy
+
+PW backports are optional and off by default. Playing PO must not require
+PW. Asset-dependent features will import and convert assets from either a
+local PW PSP ISO or a PW Master Collection installation into the same
+PO-compatible representation. The donor source is not needed after import.
+Each feature belongs in the Game tab, with its toggle available only when
+its required assets have been imported and validated. Import does not turn
+features on. See [project rules](AGENTS.md) for the full requirements.
+
+Fulton currently remains a developer prototype: dual-source asset import
+and Game-tab integration are pending. The workflow below is for development.
+
 ## Optional Fulton prototype (PO only)
 
 Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **L + R +
