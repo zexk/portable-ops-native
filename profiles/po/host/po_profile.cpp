@@ -9,6 +9,7 @@
 #include "fulton.hpp"
 #include "fulton_settings.hpp"
 #include "interpolation.hpp"
+#include "presence.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "trace_models.hpp"
@@ -46,6 +47,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);
+    mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
 }
 
 } // namespace

@@ -182,6 +182,15 @@ are now mapped statically: request `0x41498`, wrapper `0x453C`, loader
 `0x4115C` and startup `0x20B8`; EU and JP are in the same table. Human
 mission names and application integration still need mapping.
 
+A local state provider now exists: [`presence.hpp`](../common/host/presence.hpp)
+wraps the stage request in PO and all three PO+ editions and keeps the
+last requested stage name. A bounded PO boot logged `init`, `r_main01` and
+`title` in that order; PO+ is not yet run. Area names come from the
+twenty-entry table every scenario carries; that entry N names `st<N+1>`
+is inferred from the online maps and unconfirmed in game (see the stage
+identity section linked above). Nothing consumes the state yet: a Discord
+transport needs an application id and an opt-in setting.
+
 ## 12. Draw distance, shadows and LOD
 
 Static view findings are in
