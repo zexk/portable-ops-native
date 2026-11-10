@@ -81,7 +81,7 @@ struct State {
     std::optional<std::array<std::uint16_t, 2>> old_yaw;
     std::array<std::uint16_t, 2> owned_yaw{};
     std::optional<fulton_geometry::Matrix> harness_pose;
-    unsigned frames{}, phase_frames{};
+    unsigned frames{}, phase_frames{}, yank_frames{}; // yank_frames: ticks since the lift clip started
     bool lift_released = false;
     unsigned foley_played = 0;
     Finish finish;
@@ -429,18 +429,22 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
         extra_effects = extra_sounds(state.phase, frame, end, state.place_hash == kPWPlaceArchive,
                                     state.foley_played);
         const float progress = end > 0 ? std::clamp(frame / end, 0.0f, 1.0f) : 0;
-        scale = std::clamp((progress - 0.55f) * 3, 0.02f, 1.0f);
         harness_scale = progress > 0.4f ? 1.0f : 0.02f; // clipped on mid-placement
-        if (state.snake.ended(memory) && state.phase_frames > 2) {
-            hand_snake = true;
+        const bool ended = state.snake.ended(memory) && state.phase_frames > 2;
+        // PW MC 0x6AA628A0 sync capture: balloon growth and enemy clip 101
+        // start on one frame, at player tick 260 of 375, and overlap the
+        // last 23 attach frames. PW 0x819F50 starts the balloon bank there.
+        if (!state.yank_frames && (ended || progress >= 260.0f / 375.0f)) {
             state.soldier.apply(memory, state.lift, kLiftArchive);
-            state.phase = Phase::Yank;
-            state.phase_frames = 0;
+            state.yank_frames = 1;
             next_clip = kYankClip;
             lift_effect = 0;
-            // PW 0x819F50 starts the balloon bank alongside 0x9D3B,
-            // on entry to the soldier's yank action, after attachment.
             sound = true;
+        }
+        if (ended) {
+            hand_snake = true;
+            state.phase = Phase::Yank;
+            state.phase_frames = 0;
         }
         break;
     }
@@ -471,6 +475,13 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     }
     default: break;
     }
+    // Same capture: growth is linear and full at clip 101 tick 300. The
+    // channel still holds the previous clip on the tick that requests it.
+    if (state.phase == Phase::Attaching || state.phase == Phase::Yank) {
+        const float lift = state.yank_frames > 1 ? std::bit_cast<float>(memory.load32(state.soldier.channel + 0x38u)) : 0;
+        scale = std::clamp(lift / 300.0f, 0.02f, 1.0f);
+        if (state.yank_frames && !next_clip) ++state.yank_frames;
+    }
     // PO ULUS10202 1.02: render object work +0x110, bones at object +0xAC.
     // PW's local offset follows the spine orientation, including prone motion.
     // Never move the actor root to imitate the still-unmapped visible slide.
@@ -481,7 +492,7 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
         // Follow placement while the soldier turns. At yank entry PW aims
         // from bone 4, then preserves orientation via the harness effector
         // (local 0,-1000,0). Retaining rotation avoids zero-size tips.
-        if (!state.harness_pose || state.phase == Phase::Attaching || next_clip == kYankClip) {
+        if (!state.harness_pose || state.yank_frames <= 1) {
             if (const auto chest = fulton_geometry::bone(memory, body, 4))
                 state.harness_pose = fulton_geometry::harness(anchor,
                     fulton_geometry::transform(*chest, {0, 100, -300}));
