@@ -97,22 +97,24 @@ int main(int argc, char **argv) {
         assert(digest == hash);
     }
     // Motions: the first stage archive of each name whose clips convert.
-    mgs::fulton_convert::Bytes lift, place;
+    mgs::fulton_convert::Bytes lift, place, sound;
     unsigned archives = 0;
     mgs::pw_slot::stage_files(iso, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
         try {
             if (lift.empty() && name == "enedam.mtar") { ++archives; lift = mgs::fulton_convert::mtar(bytes, {101, 103}); }
             if (place.empty() && name == "snake_coop.mtar") { ++archives; place = mgs::fulton_convert::mtar(bytes, {156}); }
+            if (sound.empty() && name == "segrp_75_furuton.sep") sound = mgs::fulton_convert::bank(bytes, 0x31);
         } catch (const std::runtime_error &) {}
-        return !lift.empty() && !place.empty();
+        return !lift.empty() && !place.empty() && !sound.empty();
     });
     std::cout << "motion archives tried " << archives << '\n';
     for (const auto &[bytes, hash] : {
              std::pair{&lift, "5fc52d5c4234d551231b34310875270d7e497b49848bdb8442a7c7dab7b9ff03"},   // fult_enemy.mtar
-             std::pair{&place, "a82f6e3d55b77e8d982764cf6005f1e7167f1095ad751ef53359b6eb07ee3e56"}}) { // fult_place.mtar
+             std::pair{&place, "a82f6e3d55b77e8d982764cf6005f1e7167f1095ad751ef53359b6eb07ee3e56"},  // fult_place.mtar
+             std::pair{&sound, "f15c1f262d09969bbe486306f13c0d73e942d9940f875daaa11181ba939974a1"}}) { // fulton.sep
         const auto digest = psprecomp::sha256_bytes(*bytes);
         std::cout << bytes->size() << ' ' << digest << '\n';
         assert(digest == hash);
     }
-    std::cout << "PW extraction, model and motion conversion passed\n";
+    std::cout << "PW extraction, model, motion and balloon sound conversion passed\n";
 }

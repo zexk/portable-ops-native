@@ -99,6 +99,19 @@ inline std::map<std::string, Bytes> models(const std::map<std::uint32_t, Bytes> 
     }
     return out;
 }
+// A sound bank (SP + id, ..., EP + id at its declared size) under another id.
+// PW's segrp_75_furuton, one ATRAC3plus clip, plays in PO as it is once it
+// carries bank id 0x31, PO's own one-sound segrp_75 (sound 0x271).
+inline Bytes bank(std::span<const std::uint8_t> pw, std::uint16_t id) {
+    const std::uint32_t size = get(pw, 4);
+    if (pw[0] != 'S' || pw[1] != 'P' || size < 0x34 || size > pw.size() || pw[size - 4] != 'E' || pw[size - 3] != 'P')
+        throw std::runtime_error("Not a PW sound bank");
+    Bytes out(pw.begin(), pw.end());
+    std::memcpy(out.data() + 2, &id, 2);
+    std::memcpy(out.data() + size - 2, &id, 2);
+    return out;
+}
+
 // PO's 19-joint humanoid: joint name hashes and each joint's parent (255 for
 // the root), as every PO soldier and player motion archive lists them. PW
 // names its joints differently but orders and parents them the same.
