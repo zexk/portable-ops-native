@@ -282,6 +282,21 @@ previous glyph's position. This needs a new vertex path, not the existing
 orthographic option. A separate newest-HUD compositing experiment could
 reduce UI delay, but cannot reorder arbitrary screen-space effects safely.
 
+Implemented on 2026-11-10 as `CutThresholds::through`, on for PO and PO+,
+off with `MGSPO_INTERPOLATION_NO_THROUGH`. Through-mode draws keep a CPU
+copy of their vertices; a draw call pairs with the next frame's call of
+the same pipeline, texture, palette, viewport, scissor, blend, push
+constants and size when both frames have as many of those. Lighting
+offsets are left out of the comparison: they lie in each frame's own
+buffer region and rejected every pair at first. Position and vertex
+colour blend when every vertex keeps its UVs and moves at most 48 pixels.
+In a mission trace about 94 percent of roughly 51 sprite draw calls a
+frame paired, and up to 8 moved per present. The user confirmed the
+weapon wheel's fade as better. Blending frame pairs without 3D was tried
+and removed: a replay draws only draw calls into the displayed
+framebuffer, and the splash screens came out dark and flickering, so
+full-screen 2D screens stay at 30. No pixel comparison was run.
+
 ## 15. Interpolation latency
 
 [`analyze-presentation-delay.cpp`](../scripts/analyze-presentation-delay.cpp)
