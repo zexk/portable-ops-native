@@ -94,9 +94,11 @@ bool eligible(const Memory &memory, Target target) {
     const auto kind = memory.load32(target.work + 0x1850u);
     // Same status mask as the original enemy query. No carried actors or
     // scripted prisoners; their callback/state contracts need separate work.
+    // +0x1438 is the stage script's own capture procedure, the one a truck
+    // delivery runs: 79 in st01, 82 in another stage seen live. Any is taken.
     return (flags & 0x40399u) == 0u && ((flags & 6u) != 0u || held_up(memory, target)) &&
            (memory.load32(target.work + 0x185cu) & 0x02000000u) == 0u &&
-           kind >= 20u && kind < 54u && memory.load32(target.work + 0x1438u) == 79u;
+           kind >= 20u && kind < 54u && memory.load32(target.work + 0x1438u) != 0u;
 }
 
 template<class Memory>

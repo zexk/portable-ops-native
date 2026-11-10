@@ -203,8 +203,10 @@ int main(int argc, char **argv) {
     memory.words[work + 0x1850] = 3;
     assert(!eligible(memory, target)); // Scripted prisoner.
     memory.words[work + 0x1850] = 23;
-    memory.words[work + 0x1438] = 88;
-    assert(!eligible(memory, target)); // Unsupported scenario callback.
+    memory.words[work + 0x1438] = 0;
+    assert(!eligible(memory, target)); // No capture procedure to run.
+    memory.words[work + 0x1438] = 82;
+    assert(eligible(memory, target)); // Procedure numbers differ by stage.
     memory.words[work + 0x1438] = 79;
 
     constexpr std::uint32_t node = 0x09b30000u;

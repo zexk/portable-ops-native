@@ -152,7 +152,7 @@ inline std::unordered_map<std::uint32_t, std::array<std::optional<Request>, 2>> 
 // Defaults follow PW's anchor and 1000 * growth height.
 inline float balloon_y = 1000, harness_y = 0;
 inline std::vector<std::uint8_t> placement_bytes;
-inline bool placement_prepared = false;
+inline bool placement_prepared = false, donors_prepared = false;
 
 // A standalone optional archive avoids increasing fixed-size stage ZARs.
 // PO ULUS-10202 1.02: generic resource handler 0x3BC8C parses Mtar and files
@@ -228,6 +228,7 @@ inline void invalidate() {
     selecting_motion = false;
     learned.clear();
     placement_prepared = false;
+    donors_prepared = false;
 }
 
 template<class Memory>
@@ -312,6 +313,43 @@ void lookup(Context &ctx, std::uint32_t key, Then then) {
     portablekit::hle_extension::call_guest(ctx, base + 0x3bb18u, {key}, then);
 }
 
+// Converted donors a stage's own archive does not hold, in load order: a
+// model binds the texture pack its header names when it loads.
+struct Donor { const char *name; std::uint32_t key; std::vector<std::uint8_t> bytes; };
+inline std::vector<Donor> donors{{"fult_item_balloon.txp", 0x14f66bb7u, {}}, {"fult_item_body.txp", 0x14430af6u, {}},
+                                 {"fult_item_balloon.mdp", 0x13f66bb7u, {}}, {"fult_item_body.mdp", 0x13430af6u, {}},
+                                 {"fult_enemy.mtar", 0x08000000u | kLiftArchive, {}}};
+
+// PO ULUS-10202 1.02: dispatcher 0x3BC8C runs the loader registered for the
+// key's type on a heap copy and, in mode 1, files the result in the resource
+// cache exactly as for a cache.dar entry, whatever the type (sound banks
+// aside). So no stage archive has to hold the donors or grow to fit them.
+// Once per stage; a resource the stage already supplies is left alone.
+inline void prepare_donors(Runtime &runtime, Context &ctx, Resume next, std::size_t at = 0) {
+    while (at < donors.size() && donors[at].bytes.empty()) ++at;
+    if (donors_prepared || at == donors.size()) { donors_prepared = true; next(ctx); return; }
+    lookup(ctx, donors[at].key, [&runtime, next, at](auto &context, std::uint32_t found) {
+        if (runtime.memory().contains(found, 4u)) { prepare_donors(runtime, context, next, at + 1); return; }
+        const auto size = std::uint32_t(donors[at].bytes.size());
+        portablekit::hle_extension::call_guest(context, fulton_sound::kAlloc, {0u, size, 0u},
+            [&runtime, next, at, size](auto &allocated, std::uint32_t buffer) {
+                if (!buffer || !runtime.memory().contains(buffer, size)) {
+                    std::cerr << "[fulton] no memory for " << donors[at].name << std::endl;
+                    donors_prepared = true;
+                    next(allocated);
+                    return;
+                }
+                runtime.memory().copy_in(buffer, donors[at].bytes);
+                portablekit::hle_extension::call_guest(allocated, base + 0x3bc8cu, {buffer, donors[at].key, 1u, size, 0u},
+                    [&runtime, next, at](auto &loaded, std::uint32_t result) {
+                        std::cout << "[fulton] " << donors[at].name << " loaded from memory, handler returned "
+                                  << result << std::endl;
+                        prepare_donors(runtime, loaded, next, at + 1);
+                    });
+            });
+    });
+}
+
 inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uint32_t enemy,
                   Resume resume, Finish finish) {
     state = {};
@@ -338,6 +376,7 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
     };
     // The sound bank first: a stage load resets the heap it lives in.
     fulton_sound::prepare(runtime, ctx, [&runtime, saved, resume, fail](Context &ctx) {
+    prepare_donors(runtime, ctx, [&runtime, saved, resume, fail](Context &ctx) {
     prepare_place(runtime, ctx, [&runtime, saved, resume, fail](Context &ctx) {
     lookup(ctx, 0x08000000u | kPlaceArchive, [&runtime, saved, resume, fail](auto &context, std::uint32_t stock) {
     lookup(context, 0x08000000u | kPWPlaceArchive, [&runtime, saved, resume, fail, stock](auto &context, std::uint32_t donor) {
@@ -389,6 +428,7 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
                     });
             });
         });
+    });
     });
     });
     });
@@ -547,6 +587,11 @@ inline void install(Runtime &runtime) {
             std::cerr << "[fulton] fult_place.mtar has invalid PO placement header" << std::endl;
             placement_bytes.clear();
         }
+    }
+    for (auto &donor : donors) {
+        std::ifstream file(fulton_assets::directory() / donor.name, std::ios::binary);
+        donor.bytes.assign(std::istreambuf_iterator<char>(file), {});
+        if (donor.bytes.size() < 32 || donor.bytes.size() > 0x10000u) donor.bytes.clear();
     }
     if (const char *y = portablekit::hle_extension::env("FULTON_BALLOON_Y")) balloon_y = std::strtof(y, nullptr);
     if (const char *y = portablekit::hle_extension::env("FULTON_HARNESS_Y")) harness_y = std::strtof(y, nullptr);

@@ -161,14 +161,28 @@ inline void before_read(std::uint32_t fd) {
     }
 }
 
+inline bool has_donors(const std::filesystem::path &root) {
+    std::error_code error;
+    for (const char *name : {"fult_item_balloon.txp", "fult_item_body.txp", "fult_item_balloon.mdp",
+                             "fult_item_body.mdp", "fult_enemy.mtar"})
+        if (std::filesystem::is_symlink(root / name, error) || !std::filesystem::is_regular_file(root / name, error))
+            return false;
+    return true;
+}
+
 inline void load() {
     // Startup snapshot: changing the selection or importing assets needs a
     // restart. No UI thread changes a live stage filter or guest hook.
+    stages.clear();
     try {
         selected = selection(portablekit::install::read_settings_file(portablekit::install::user_data_directory()));
-        stages = checked_stages(directory());
+        // Standalone donors load in any stage; prepared stages are the older form.
+        if (has_donors(directory())) status = "Assets installed";
+        else {
+            stages = checked_stages(directory());
+            status = std::to_string(stages.size()) + " prepared stages";
+        }
         available = true;
-        status = std::to_string(stages.size()) + " prepared stages";
     } catch (const std::exception &error) {
         stages.clear();
         available = false;
