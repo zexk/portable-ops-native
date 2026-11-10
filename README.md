@@ -137,8 +137,58 @@ Each feature belongs in the Game tab, with its toggle available only when
 its required assets have been imported and validated. Import does not turn
 features on. See [project rules](AGENTS.md) for the full requirements.
 
-Fulton currently remains a developer prototype: dual-source asset import
-and Game-tab integration are pending. The workflow below is for development.
+Fulton currently remains a developer prototype. Converted bundles can be
+installed separately from their donor source, then enabled in the Game tab.
+Direct PSP ISO and MC import are pending. The workflow below is for development.
+
+### Converted Fulton bundle
+
+After preparing stages with `scripts/prepare-fulton-assets.py`, validate and
+install its output into a port user-data directory:
+
+```sh
+python3 scripts/fulton-assets.py check OUTPUT
+python3 scripts/fulton-assets.py install OUTPUT --data-dir PORT_DATA
+```
+
+`PORT_DATA` is the directory containing `settings.ini` and `ms0`, not
+`PSP/SAVEDATA`. Assets go in `PORT_DATA/pw/fulton`; the installer leaves
+settings and saves untouched and refuses to replace an existing bundle.
+It checks stage sizes and hashes, archive decompression, required converted
+model/texture/motion headers and any optional sound/placement headers.
+Only verified bundle files are copied; donor paths are not stored. This
+initial snapshot installer accepts at most 512 MiB per bundle.
+
+**Game > Peace Walker > Fulton recovery (experimental)** is off by default.
+Importing assets does not enable it. The selection persists as `pw.fulton`
+in `settings.ini`; changes require a restart. Startup checks every indexed
+stage's size and SHA-256. Missing or damaged stages leave Fulton inactive
+without blocking PO; the saved selection is kept. Restore game defaults
+turns the selection off. Only prepared stages support recovery; other stages
+cancel the attempt and retain the soldier. The menu explains unavailable
+assets; it does not yet import them.
+
+`MGSPO_FULTON_STAGE_DIR` can still override the bundle directory for developer
+tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
+with `MGSPO_FULTON_VISUALS=1` requests the asset-based experiment, and `1`
+without visuals retains the old instant-recovery developer test. The Game
+toggle is locked while this override is present.
+
+Checks without a game or renderer:
+
+```sh
+python3 scripts/fulton-assets.py --self-test
+c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
+    scripts/test-fulton-assets.cpp portablekit/src/sha256.cpp \
+    portablekit/host/install/user_data.cpp portablekit/host/profile.cpp \
+    portablekit/host/app_paths.cpp portablekit/tests/test_profile.cpp \
+    -o out/test-fulton-assets
+out/test-fulton-assets
+```
+
+Bundle checks and a Linux port build pass. The new Game-tab control still
+needs an in-game check; conversion from both raw donor formats remains
+unverified.
 
 ## Optional Fulton prototype (PO only)
 

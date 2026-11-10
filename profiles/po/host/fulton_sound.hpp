@@ -314,8 +314,7 @@ inline bool valid_foley(std::span<const std::uint8_t> bytes) {
 
 inline void install(psprecomp::Runtime &) {
     if (!fulton_assets::enabled()) return;
-    const char *directory = portablekit::hle_extension::env("FULTON_STAGE_DIR");
-    if (!directory) return;
+    const auto directory = fulton_assets::directory();
     auto load = [directory](const char *name, std::uint32_t id, std::size_t limit) {
         std::ifstream file(std::filesystem::path(directory) / name, std::ios::binary);
         std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(file), {}};

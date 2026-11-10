@@ -535,7 +535,8 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
 inline void install(Runtime &runtime) {
     if (!fulton_assets::enabled()) return;
     trace_motion = portablekit::hle_extension::env("FULTON_TRACE_MOTION") != nullptr;
-    if (const char *directory = portablekit::hle_extension::env("FULTON_STAGE_DIR")) {
+    {
+        const auto directory = fulton_assets::directory();
         std::ifstream file(std::filesystem::path(directory) / "fult_place.mtar", std::ios::binary);
         placement_bytes.assign(std::istreambuf_iterator<char>(file), {});
         std::array<std::uint32_t, 5> header{};

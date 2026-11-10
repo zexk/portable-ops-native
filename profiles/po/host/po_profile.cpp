@@ -7,6 +7,7 @@
 #include "camera.hpp"
 #include "detail_distance.hpp"
 #include "fulton.hpp"
+#include "fulton_settings.hpp"
 #include "interpolation.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
@@ -88,6 +89,8 @@ const GameProfile &game() {
         .register_extra_hle = &mgs::fulton_assets::install,
         .patch_loaded_image = &patch_image,
         .module_code_ready = &mgs::fulton::module_ready,
+        .draw_game_settings = &mgs::fulton_settings::draw,
+        .reset_game_settings = &mgs::fulton_settings::reset,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .adjustable_fov = true,

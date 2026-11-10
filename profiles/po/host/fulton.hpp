@@ -265,7 +265,11 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
 
 inline void install(psprecomp::Runtime &runtime) {
     const char *value = portablekit::hle_extension::env("FULTON");
-    if (!value || std::strcmp(value, "1") != 0) return;
+    // Preserve asset-free instant recovery only as an explicit developer mode.
+    const char *visuals = portablekit::hle_extension::env("FULTON_VISUALS");
+    const bool instant = value && std::strcmp(value, "1") == 0 &&
+                         (!visuals || std::strcmp(visuals, "1") != 0);
+    if (!fulton_assets::enabled() && !instant) return;
     original_update = runtime.registered_function(update);
     if (!original_update) return;
     fulton_visuals::install(runtime);
