@@ -205,11 +205,10 @@ the PW capture; its exact integer rule remains unmapped. The actor root
 position stays unchanged, as observed in PW. Harness orientation follows
 the two bone points during attachment, then stays fixed while its origin
 follows bone 2 during lift. Live testing found rotation broadly similar to
-PW, but animation synchronization remains wrong. Current balloon growth
-starts at 55% of attach while the enemy yank waits for attach completion;
-PW trace shows balloon/lift starting before Snake finishes placing.
-A focused frame-linked trace is prepared to resolve that overlap and
-growth timing. The visible body slide still needs animation/root-bone analysis. Missing
+PW. Following a frame-linked PW trace, the lift clip, balloon sound and
+growth start together at 260/375 of the attach, the harness stays upright
+and grows with the balloon, and both follow the soldier's spine into the
+sky. The visible body slide still needs animation/root-bone analysis. Missing
 or invalid bone matrices use the saved enemy position and a rigid fallback.
 
 Provide a local asset directory with `fult_item_balloon.mdp/.txp` and

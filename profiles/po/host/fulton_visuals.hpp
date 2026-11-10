@@ -80,7 +80,6 @@ struct State {
     std::uint16_t yaw{};
     std::optional<std::array<std::uint16_t, 2>> old_yaw;
     std::array<std::uint16_t, 2> owned_yaw{};
-    std::optional<fulton_geometry::Matrix> harness_pose;
     unsigned frames{}, phase_frames{}, yank_frames{}; // yank_frames: ticks since the lift clip started
     bool lift_released = false;
     unsigned foley_played = 0;
@@ -420,7 +419,7 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     std::optional<std::uint32_t> lift_effect;
     bool hand_snake = false, sound = false;
     std::vector<std::uint32_t> extra_effects;
-    float scale = 1, harness_scale = 1;
+    float scale = 1;
     switch (state.phase) {
     case Phase::Attaching: {
         mgs::set_action(runtime, ctx, player, 0x13bu);
@@ -429,7 +428,6 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
         extra_effects = extra_sounds(state.phase, frame, end, state.place_hash == kPWPlaceArchive,
                                     state.foley_played);
         const float progress = end > 0 ? std::clamp(frame / end, 0.0f, 1.0f) : 0;
-        harness_scale = progress > 0.4f ? 1.0f : 0.02f; // clipped on mid-placement
         const bool ended = state.snake.ended(memory) && state.phase_frames > 2;
         // PW MC 0x6AA628A0 sync capture: balloon growth and enemy clip 101
         // start on one frame, at player tick 260 of 375, and overlap the
@@ -489,25 +487,21 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     const auto body = memory.load32(state.enemy + 0x110u);
     if (const auto spine = fulton_geometry::bone(memory, body, 2)) {
         anchor = fulton_geometry::transform(*spine, {0, 100, -200});
-        // Follow placement while the soldier turns. At yank entry PW aims
-        // from bone 4, then preserves orientation via the harness effector
-        // (local 0,-1000,0). Retaining rotation avoids zero-size tips.
-        if (!state.harness_pose || state.yank_frames <= 1) {
-            if (const auto chest = fulton_geometry::bone(memory, body, 4))
-                state.harness_pose = fulton_geometry::harness(anchor,
-                    fulton_geometry::transform(*chest, {0, 100, -300}));
-        }
     }
-    auto harness = state.harness_pose.value_or(fulton_geometry::identity());
-    for (unsigned i = 0; i < 3; ++i) harness[12 + i] = anchor[i] + (i == 1 ? harness_y : 0);
+    // PW MC 0x6AA628A0 sync capture, harness and balloon render objects:
+    // from the third growth update on, the harness basis is the constant
+    // diag(1,-1,-1) times growth, whatever the body pose, and the balloon
+    // sits 100 + 1000 * growth above the harness origin.
+    auto harness = fulton_geometry::harness(anchor, {anchor[0], anchor[1] - 1, anchor[2]});
+    harness[13] += harness_y;
     auto balloon = fulton_geometry::identity();
-    for (unsigned i = 0; i < 3; ++i) balloon[12 + i] = harness[12 + i] + (i == 1 ? balloon_y * scale : 0);
+    for (unsigned i = 0; i < 3; ++i) balloon[12 + i] = harness[12 + i] + (i == 1 ? 100 + balloon_y * scale : 0);
     auto place = [&memory](std::uint32_t object, const fulton_geometry::Matrix &matrix) {
         for (unsigned i = 0; i < matrix.size(); ++i)
             memory.store32(object + 0x10u + i * 4u, std::bit_cast<std::uint32_t>(matrix[i]));
     };
     place(state.object, fulton_geometry::scaled(balloon, scale));
-    place(state.harness, fulton_geometry::scaled(harness, harness_scale));
+    place(state.harness, fulton_geometry::scaled(harness, scale));
     const auto saved = ctx;
     auto draw = [saved, resume](Context &context) {
         portablekit::hle_extension::call_guest(context, base + 0x14b00u, {state.object},

@@ -32,7 +32,11 @@ std::optional<Matrix> bone(const Memory &memory, std::uint32_t object, unsigned 
     for (unsigned i = 0; i < 3; ++i) {
         const float length = matrix[i * 4] * matrix[i * 4] + matrix[i * 4 + 1] * matrix[i * 4 + 1] +
                              matrix[i * 4 + 2] * matrix[i * 4 + 2];
-        if (length < 0.25f || length > 4.0f) return {};
+        // PO ULUS-10202 1.02 live dump: soldier bone bases carry a uniform
+        // scale near 1102. PW's local offsets are world units, so normalize.
+        if (!(length > 1e-6f)) return {};
+        const float inverse = 1.0f / std::sqrt(length);
+        for (unsigned row = 0; row < 3; ++row) matrix[i * 4 + row] *= inverse;
     }
     return matrix;
 }

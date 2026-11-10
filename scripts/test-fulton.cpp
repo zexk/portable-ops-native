@@ -171,6 +171,8 @@ int main(int argc, char **argv) {
         for (unsigned i = 0; i < 16; ++i)
             memory.store32(bones + 2 * 64 + i * 4, std::bit_cast<std::uint32_t>(spine[i]));
         assert(bone(memory, object, 2) == spine);
+        memory.store32(bones + 2 * 64 + 8, std::bit_cast<std::uint32_t>(-1102.0f));
+        assert(bone(memory, object, 2) == spine); // PO's scaled bases are normalized.
         memory.store32(bones + 2 * 64, 0x7fc00000u);
         assert(!bone(memory, object, 2)); // Never feed NaN poses to rendering.
         memory.store32(object + 0xac, 0);
