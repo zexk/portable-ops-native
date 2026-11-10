@@ -99,5 +99,22 @@ int main(int argc, char **argv) {
     assert(!assets::selection(settings::read_settings_file(root)));
     assert(!assets::selection({{"pw.fulton", "true"}}));
     if (argc > 1) assets::check(argv[1]);
+    if (argc > 2) {
+        // Exercise the exact Game-tab import path, with an isolated profile.
+        assert(mgs::fulton_settings::import(argv[2]).empty());
+        assets::load();
+        assert(assets::available && !assets::selected && !assets::enabled());
+        assert(!assets::selection(settings::read_settings_file(root)));
+        // A rejected donor must preserve the installed bundle and selection.
+        const auto size = fs::file_size(bundle / "fult_enemy.mtar");
+        assert(!mgs::fulton_settings::import(root / "missing-source").empty());
+        assert(fs::file_size(bundle / "fult_enemy.mtar") == size);
+        mgs::fulton_settings::save(true);
+        assets::load();
+        assert(assets::selected && assets::enabled());
+        mgs::fulton_settings::save(false);
+        assets::load();
+        assert(!assets::selected && !assets::enabled());
+    }
     std::cout << "Fulton bundle checks, import, default-off selection and persistence passed\n";
 }

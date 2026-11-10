@@ -15,6 +15,50 @@
 
 int main(int argc, char **argv) {
     {
+        using namespace mgs::fulton_audio_convert;
+        Clip tone{{}, 44100};
+        for (unsigned i = 0; i < 4410; ++i)
+            tone.samples.push_back(std::int16_t(std::lround(std::sin(i * 2 * 3.141592653589793 * 440 / 44100) * 20000)));
+        const auto encoded = adpcm(tone.samples);
+        constexpr int coefficients[5][2] = {{0, 0}, {60, 0}, {115, -52}, {98, -55}, {122, -60}};
+        std::uint64_t error = 0, energy = 0;
+        int h1 = 0, h2 = 0;
+        std::size_t position = 0;
+        for (std::size_t at = 0; at < encoded.size(); at += 16) {
+            assert(encoded[at] >> 4 < 5 && (encoded[at] & 15) <= 12);
+            assert(encoded[at + 1] == (at + 16 == encoded.size()));
+            const auto [a, b] = coefficients[encoded[at] >> 4];
+            for (unsigned i = 0; i < 28; ++i, ++position) {
+                int q = (encoded[at + 2 + i / 2] >> (i % 2 * 4)) & 15;
+                if (q >= 8) q -= 16;
+                const int decoded = std::clamp(((q * 4096) >> (encoded[at] & 15)) + ((h1 * a + h2 * b) >> 6), -32768, 32767);
+                if (position < tone.samples.size()) {
+                    const std::int64_t sample = tone.samples[position], delta = sample - decoded;
+                    error += delta * delta; energy += sample * sample;
+                }
+                h2 = h1; h1 = decoded;
+            }
+        }
+        assert(error < energy / 10000); // Independent PSP decode: over 40 dB.
+        const auto reduced = resample(Clip{std::vector<std::int16_t>(480, 1234), 48000}, 12000);
+        assert(reduced.size() == 120 && std::all_of(reduced.begin(), reduced.end(), [](auto v) { return v == 1234; }));
+        const auto sound = bank({tone, tone, tone, tone}, 0x144, 44100, 0x9000);
+        assert(word(sound, 0) == 0x01445053 && word(sound, sound.size() - 4) == 0x01445045);
+        assert(word(sound, 4) == sound.size() && word(sound, 12) == 0xb0 && word(sound, 16) == 0xd0);
+        const auto voice = word(sound, 24);
+        assert(word(sound, voice + 12) == 0x10003c00);
+        for (unsigned i = 0; i < 4; ++i) {
+            assert(word(sound, 0x30 + i * 32 + 8) == i * 8);
+            const auto sample = 0xd0 + word(sound, 0xb0 + i * 8);
+            assert(word(sound, sample + 4) == (44100u << 16 | 0x1000u));
+            assert(sample + 8 + word(sound, sample) <= voice);
+        }
+        for (const auto &bad : {Bytes{}, sound})
+            try { cue(bad, 0); assert(false); } catch (const std::runtime_error &) {}
+        try { bank({tone}, 0x31, 44100, 32); assert(false); } catch (const std::runtime_error &) {}
+        std::cout << "PW ADPCM decode, resampling, bank layout and invalid input checks passed\n";
+    }
+    {
         // One 64x64 4bpp image, two textures with their own CLUTs.
         using namespace mgs::fulton_convert;
         Bytes pw;
@@ -133,8 +177,40 @@ int main(int argc, char **argv) {
     }
     if (argc > 4) {
         using mgs::fulton_convert::get;
-        const auto wide = mgs::fulton_convert::bundle(mgs::pw_slot::master_collection(argv[3]));
-        assert(wide.size() == 6);
+        const auto source = mgs::pw_slot::master_collection(argv[3]);
+        const std::uint32_t voice_key[] = {0x3716b682};
+        const auto voice = mgs::pw_slot::extract(source, voice_key).at(voice_key[0]);
+        assert(psprecomp::sha256_bytes(voice) == "59edaca3c63d5c8c5d53364b8147cfb17a91f496d1dee1d208de06977a49c53d");
+        const auto voice_sample = get(voice, 16) + get(voice, get(voice, 12) + get(voice, 0x30 + 6 * 32 + 8));
+        assert(psprecomp::sha256_bytes(std::span(voice).subspan(voice_sample + 16, get(voice, voice_sample))) ==
+               "0fa1850cb503317ff9449b7e3ad212948ebdcfd60b1c2a75690094c9eaec6a10");
+        auto broken_voice = voice;
+        mgs::fulton_convert::put(broken_voice, 0x30 + 6 * 32 + 8, 0xfffffff8);
+        try { mgs::fulton_audio_convert::cue(broken_voice, 6); assert(false); } catch (const std::runtime_error &) {}
+        broken_voice = voice;
+        broken_voice[voice_sample + 16] = 0;
+        try { mgs::fulton_audio_convert::cue(broken_voice, 6); assert(false); } catch (const std::runtime_error &) {}
+        const auto wide = mgs::fulton_convert::bundle(source);
+        assert(wide.size() == 9);
+        for (const auto &[name, id, count, rate, limit] : {
+                 std::tuple{"fulton.sep", 0x31u, 1u, 12000u, 0x8000u},
+                 std::tuple{"fulton-lift.sep", 0x32u, 2u, 44100u, 0x11000u},
+                 std::tuple{"fulton-foley.sep", 0x144u, 4u, 44100u, 0x9000u}}) {
+            const auto &sound = wide.at(name);
+            assert(sound.size() <= limit && get(sound, 4) == sound.size());
+            assert(get(sound, 0) == (0x5053u | id << 16) && get(sound, sound.size() - 4) == (0x5045u | id << 16));
+            assert((get(sound, 12) - 0x30) / 32 == count);
+            for (unsigned i = 0; i < count; ++i) {
+                const auto sample = get(sound, 16) + get(sound, get(sound, 12) + i * 8);
+                const auto bytes = get(sound, sample);
+                assert(bytes && bytes % 16 == 0 && sample + 8 + bytes <= get(sound, 20));
+                assert(get(sound, sample + 4) == (rate << 16 | 0x1000u));
+                assert(sound[sample + 8 + bytes - 15] == 1);
+                const auto frames = bytes / 16 * 28;
+                assert(std::abs(int(frames * 1000ull / rate) - int(get(sound, 0x30 + i * 32 + 24))) <= 3);
+            }
+            std::cout << name << ": " << count << " MC cues, " << sound.size() << " bytes\n";
+        }
         for (const char *name : {"fult_item_balloon", "fult_item_body"}) {
             // Models: the disc's, less the run of zeros its exporter left
             // between vertices and materials. Put the run back and the

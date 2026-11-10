@@ -203,6 +203,9 @@ inline void prepare(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx
         foley_current = false;
         std::cerr << "[fulton] private audio catalogue unavailable; extra cues disabled" << std::endl;
     }
+    // PSP balloon remains ATRAC3plus; MC import produces a direct ADPCM cue.
+    if (!bank.empty() && bank_word(bank, 0x34) == 0x01010000u)
+        retype(runtime.memory(), kSound, 1u, bank);
     if (!lift_bank.empty()) retype(runtime.memory(), kLiftSound, 2u, lift_bank);
     if (!foley_bank.empty() && catalog(runtime.memory()) == catalog_address && catalog_address)
         retype(runtime.memory(), kFoleySound, fulton_audio_catalog::kSounds, foley_bank);

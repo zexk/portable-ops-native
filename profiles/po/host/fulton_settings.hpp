@@ -1,9 +1,9 @@
 #pragma once
 
 #include "fulton_assets.hpp"
+#include "fulton_convert.hpp"
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
-#include "fulton_convert.hpp"
 #include "ui/file_browser.hpp"
 #include "ui/widgets.hpp"
 #include <chrono>
@@ -34,13 +34,18 @@ inline std::unique_ptr<portablekit::ui::FileBrowser> browser;
 // A running import: reading a disc image takes seconds, so it works beside
 // the menu and reports its outcome as the row's note. Empty on success.
 inline std::future<std::string> importing;
+#endif
 
-// A Peace Walker PSP disc image is converted; a folder must already hold a
-// converted bundle. Neither is needed afterwards.
+// Accept either PW edition, or an already converted bundle. Sources remain
+// read-only and are not needed afterwards.
 inline std::string import(const std::filesystem::path &chosen) {
     try {
         std::error_code error;
-        if (std::filesystem::is_directory(chosen, error)) fulton_assets::import_bundle(chosen);
+        if (std::filesystem::is_directory(chosen, error)) {
+            if (std::filesystem::is_regular_file(chosen / "fult_enemy.mtar", error))
+                fulton_assets::import_bundle(chosen);
+            else fulton_assets::install_files(fulton_convert::bundle(pw_slot::master_collection(chosen)));
+        }
         else {
             portablekit::IsoImage iso(chosen);
             fulton_assets::install_files(fulton_convert::bundle(pw_slot::psp(iso)));
@@ -51,7 +56,6 @@ inline std::string import(const std::filesystem::path &chosen) {
         return error.what();
     }
 }
-#endif
 
 // The folder browser of "Import Fulton assets…". True while it is open.
 inline bool screen([[maybe_unused]] bool back) {
@@ -89,9 +93,9 @@ inline void draw() {
         save(!fulton_assets::selected);
     if (!override && !fulton_assets::available && !importing.valid() &&
         button_row("Import Fulton assets…",
-                   {false, {}, "Choose your Peace Walker PSP disc image (.iso), or a folder of already converted "
-                               "Fulton assets. What Fulton needs is converted and copied into the game's own "
-                               "data; the image is not changed and not needed afterwards. Importing does not "
+                   {false, {}, "Choose your Peace Walker PSP disc image (.iso), Master Collection installation "
+                               "folder, or already converted Fulton assets. Files are converted and copied into "
+                               "the game's own data; the source is not changed or needed afterwards. Importing does not "
                                "turn Fulton on."})) {
         FileBrowser::Options browse;
         browse.empty_note = "No folders or disc images here.";

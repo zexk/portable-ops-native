@@ -138,8 +138,8 @@ its required assets have been imported and validated. Import does not turn
 features on. See [project rules](AGENTS.md) for the full requirements.
 
 Fulton is experimental. Its assets are imported in the Game tab from a
-local Peace Walker PSP disc image, then the feature is enabled there.
-Import from a Master Collection installation is pending.
+local Peace Walker PSP disc image or Master Collection installation, then
+the feature is enabled there.
 
 ### Converted Fulton bundle
 
@@ -160,14 +160,21 @@ turns the selection off.
 
 While assets are missing or invalid, **Import Fulton assets…** in the same
 section opens the file browser. Choosing a Peace Walker PSP disc image
-(`.iso`) converts what Fulton needs on a background thread: the models and
+(`.iso`) or Master Collection installation folder converts what Fulton
+needs on a background thread: the models and
 texture packs from the disc's SLOT container, the lift and attach motions
 and the sound banks from its stage container. A folder that already holds a
 converted bundle is accepted too. Either way the files are written to a
 staging folder and checked before they replace `pw/fulton`. The image is
 only read, the selection is not changed, and the source is not needed
-afterwards. Checked with EU `ULES-01372` 1.01; other regions are unverified.
-A PSP disc yields no soldier grunt for the attach, so that one cue is absent.
+afterwards. Checked with EU `ULES-01372` 1.01 and MC Steam build `25294658`
+(PE `0x6AA628A0`); other builds are unverified. MC accepts the installation
+root, `mgspw`, `MLG` or `disc0_rel`. It needs no PSP ISO. Its Ogg sounds are
+decoded in memory with `stb_vorbis` and encoded as PSP ADPCM. The 4.36-second
+balloon effect uses 12 kHz to fit PO's 32 KiB bank; other effects use
+44.1 kHz, including the confirmed ordinary-soldier yank grunt. PSP import
+keeps its original ATRAC3plus balloon and sequenced effects; its grunt
+remains absent.
 
 `MGSPO_FULTON_STAGE_DIR` can override the bundle directory for developer
 tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
@@ -178,10 +185,11 @@ toggle is locked while this override is present.
 Checks without a game or renderer:
 
 ```sh
-c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
+c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_party \
     scripts/test-fulton-assets.cpp portablekit/src/sha256.cpp \
     portablekit/host/install/user_data.cpp portablekit/host/profile.cpp \
     portablekit/host/app_paths.cpp portablekit/tests/test_profile.cpp \
+    portablekit/host/kernel/iso_image.cpp \
     -o out/test-fulton-assets
 out/test-fulton-assets
 c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_party \
@@ -189,13 +197,24 @@ c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_
     portablekit/host/kernel/iso_image.cpp -o out/test-pw-slot
 out/test-pw-slot                  # conversions on synthetic data
 out/test-pw-slot PW.iso [OUTPUT]  # whole bundle from a local ULES-01372 image
+out/test-pw-slot PW.iso PSP_OUTPUT MC_FOLDER MC_OUTPUT # compare both editions
+out/test-fulton-assets MC_OUTPUT MC_FOLDER # isolated profile, exact import path
+out/test-fulton-assets PSP_OUTPUT PW.iso   # same checks for PSP import
 ```
 
-Bundle checks and a Linux port build pass. The Game-tab toggle and both
-imports were checked in game on Linux (ULUS-10202). Seven of the nine files
+Bundle checks and a Linux port build pass. The Game-tab toggle, converted
+folder import and PSP ISO import were checked in game on Linux (ULUS-10202).
+Seven of the nine files
 converted from the disc image are byte for byte what the earlier Python
 tools produced; the two effect banks were confirmed by ear. Conversion from
-a Master Collection installation does not exist yet.
+a Master Collection installation passes offline checks: model data matches
+PSP after exporter filler is restored, texture data matches before filler,
+and the narrowed motions match the MC motions already confirmed in game.
+The voice bank and extracted grunt match the earlier live capture by
+SHA-256. All three converted audio banks fit their PO capacities. Isolated
+profiles check both import paths, default-off behavior, selection persistence
+and rejection without replacing valid assets. The complete MC bundle and
+its Game-tab browser flow still need live validation.
 
 ## Optional Fulton prototype (PO only)
 

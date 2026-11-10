@@ -5,6 +5,7 @@
 // bits and tables padded to match ("wide" below); pixels, vertices and motion
 // headers are otherwise the PSP ones.
 #include "pw_slot.hpp"
+#include "fulton_audio_convert.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -82,12 +83,14 @@ inline Bytes mdp(std::span<const std::uint8_t> wide) {
     if (get(wide, 0) != 0x5850444du || !parts || parts > 256 || bones > 256) throw std::runtime_error("Not a PW model");
     for (std::size_t at : {0x18u, 0x1cu, 0x24u, 0x2cu, 0x34u, 0x38u, 0x3cu, 0x40u, 0x44u, 0x48u, 0x4cu})
         if (get(wide, at)) throw std::runtime_error("PW model header has fields this converter does not know");
+    if (wide.size() < 0x70 || std::uint64_t(bone_table) + bones * 16ull > wide.size() ||
+        std::uint64_t(part_table) + parts * 0x70ull > wide.size())
+        throw std::runtime_error("PW model tables are truncated");
     Bytes out{'M', 'D', 'P', ' '};
     out.insert(out.end(), wide.begin() + 4, wide.begin() + 0x18);
     const std::uint32_t new_parts = 0x50 + bones * 16;
     append(out, {0x50, new_parts, get(wide, 0x30), 0, 0, 0});
     out.insert(out.end(), wide.begin() + 0x50, wide.begin() + 0x70);
-    if (std::uint64_t(bone_table) + bones * 16ull > wide.size()) throw std::runtime_error("PW model is truncated");
     out.insert(out.end(), wide.begin() + bone_table, wide.begin() + bone_table + bones * 16);
 
     // Where everything lands: tables after the parts, each on a 16-byte
@@ -99,6 +102,8 @@ inline Bytes mdp(std::span<const std::uint8_t> wide) {
         if (get(wide, at + 0x14) || get(wide, at + 0x1c) || get(wide, at + 0x24) || get(wide, at + 0x2c) ||
             get(wide, at + 0x30) || get(wide, at + 0x34) || get(wide, at + 0x38) || get(wide, at + 0x3c))
             throw std::runtime_error("PW model part has fields this converter does not know");
+        if (std::uint64_t(get(wide, at + 0x10)) + get(wide, at + 8) * 24ull > wide.size())
+            throw std::runtime_error("PW model mesh table is truncated");
         cursor = (cursor + 15) & ~15u;
         tables[part] = cursor;
         cursor += get(wide, at + 8) * 12;
@@ -302,13 +307,19 @@ inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::u
 // motion the source does not yield in a usable form is left out. A name can
 // occur in several stage entities, not all of them usable (two of the PSP
 // disc's five snake_coop archives are not): the first that converts wins.
-// The Master Collection stores its sounds as Ogg Vorbis, which PO cannot
-// play, so no bank is taken from it yet.
+// The MC motion tracks retain their finer precision; its Ogg effects become
+// direct ADPCM cues. Both editions produce the same runtime representation.
 inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
-    const std::uint32_t keys[] = {0x14f66bb7u, 0x14430af6u, 0x13f66bb7u, 0x13430af6u};
     const bool wide = source.wide;
-    const std::size_t complete = wide ? 6 : 9;
-    auto out = models(pw_slot::extract(source, keys), wide);
+    std::vector<std::uint32_t> keys = {0x14f66bb7u, 0x14430af6u, 0x13f66bb7u, 0x13430af6u};
+    // MC bank 0xD88 lives in SLOT under this resource key, not in stages.
+    // Its PSP counterpart is bank 0xD67; bank ids differ between editions.
+    if (wide) keys.push_back(0x3716b682u);
+    const auto resources = pw_slot::extract(source, keys);
+    std::vector<fulton_audio_convert::Clip> foley;
+    if (wide && (!resources.contains(0x3716b682u) || get(resources.at(0x3716b682u), 0) != 0x0d885053u))
+        throw std::runtime_error("Master Collection data lacks the supported soldier voice bank");
+    auto out = models(resources, wide);
     const auto take = [&out](const char *file, auto make) {
         if (out.contains(file)) return;
         try { out[file] = make(); } catch (const std::runtime_error &) {}
@@ -317,7 +328,20 @@ inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
         // enedam clips 101 and 103: the yank and the hang. snake_coop 156: the attach.
         if (name == "enedam.mtar") take("fult_enemy.mtar", [&] { return mtar(bytes, {101, 103}, wide); });
         if (name == "snake_coop.mtar") take("fult_place.mtar", [&] { return mtar(bytes, {156}, wide); });
-        if (wide) return out.size() == complete;
+        if (wide) {
+            using fulton_audio_convert::cue;
+            if (name == "segrp_75_furuton.sep")
+                // ponytail: 12 kHz fits the 4.36 s effect in PO's 32 KiB slot;
+                // use a larger private bank if full-bandwidth audio is needed.
+                take("fulton.sep", [&] { return fulton_audio_convert::bank({cue(bytes, 0)}, 0x31, 12000, 0x8000); });
+            if (name == "segrp_0_jochu_2other.sep") {
+                take("fulton-lift.sep", [&] {
+                    return fulton_audio_convert::bank({cue(bytes, 104), cue(bytes, 105)}, 0x32, 44100, 0x11000);
+                });
+                if (foley.empty()) foley = {cue(bytes, 32), cue(bytes, 74), cue(bytes, 37)};
+            }
+            return out.size() == 8 && foley.size() == 3;
+        }
         if (name == "segrp_75_furuton.sep") take("fulton.sep", [&] { return bank(bytes, 0x31); });
         if (name == "segrp_0_jochu_2other.sep") {
             // Sounds 0x9D3B and 0x9D3C (yank, release) as PO bank 0x32; attach
@@ -325,8 +349,16 @@ inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
             take("fulton-lift.sep", [&] { return cues(bytes, 0x32, {104, 105}, 0x11000); });
             take("fulton-foley.sep", [&] { return cues(bytes, 0x144, {32, 74, 37}, 0x9000); });
         }
-        return out.size() == complete;
+        return out.size() == 9;
     });
+    if (wide) {
+        // MC build 25294658, PE 0x6AA628A0: confirmed ordinary-soldier yank
+        // vocal, bank 0xD88 cue 6. Other voice families remain unmapped.
+        if (foley.size() == 3) foley.push_back(fulton_audio_convert::cue(resources.at(0x3716b682u), 6));
+        if (!foley.empty()) out["fulton-foley.sep"] = fulton_audio_convert::bank(foley, 0x144, 44100, 0x9000);
+        if (out.size() != 9 || foley.size() != 4)
+            throw std::runtime_error("Master Collection data lacks a supported Fulton motion or sound");
+    }
     if (!out.contains("fult_enemy.mtar")) throw std::runtime_error("PW data lacks the soldier lift motion");
     return out;
 }
