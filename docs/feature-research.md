@@ -354,5 +354,25 @@ menus. Video > Show frames early (`video.present_at_draw_sync`, or
 `MGSPO_PRESENT_AT_DRAW_SYNC=1`; PortableKit, off by default) shows
 it at the draw sync; the trace confirms one early present per frame and
 the user reports snappier input, most in menus. The pad is read after the
-draw, so input still waits one frame to be drawn; that frame is the
-game's own and is not addressed. Physical latency remains unmeasured.
+draw, so input still waits one frame to be drawn.
+
+**That frame, without changing the game** (`MGSPO_PACE_AT_PAD_READ=1` with
+Show frames early; PortableKit, off by default). In real time the loop is
+"read the pad, update, wait about 48 ms, flip, draw": the wait sits
+between the read and the picture made from it. Returning from the vblank
+waits at once does not work, the game loops on its own vblank counter.
+Instead emulated time runs ahead of real time through those waits and the
+next pad read shows the frame just drawn and waits for real time there.
+Trace: speed 100%, one early present per frame right before the read. The
+user reports snappier input with sound and speed unchanged.
+
+**Frame grid phase.** The interpolator's trace showed frames arriving 19
+to 30 ms after the moment they were stamped with ("code time"), which it
+adds as delay and which made Prediction judder. The frame-moment grid
+assumed two vblanks a frame and stayed one vblank early once the cadence
+shifted; the same happened without the new modes in 20 fps play (code
+time 12 ms against 2 ms in menus, the "14 ms" of earlier notes). Two flips
+the same distance apart now re-anchor the grid. After the fix code time
+in 30 fps menus is 2 to 5 ms and the user reports no judder; some seconds
+of 20 fps play still show 14 ms, cause not yet traced. Physical latency
+remains unmeasured.
