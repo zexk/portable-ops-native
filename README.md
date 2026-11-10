@@ -60,6 +60,11 @@ uses a new filename. **Video > Field of view** adjusts the 3D view live from
 75% to 150%; 100% is the original view. Relative aim zoom and interface size
 are preserved. The setting is saved; `MGSPO_FOV=125` overrides it for one run.
 
+**Video > Performance > FPS only** shows a small counter without a background
+in the top-left corner. It counts presented frames, including interpolated
+ones. **F3** shows or hides it. The choice is saved; `MGSPO_PERF=fps` selects
+it for one run.
+
 ## Startup (PO only)
 
 Game > Startup has two settings, off by default: **Skip logo screens** and
