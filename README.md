@@ -60,6 +60,14 @@ uses a new filename. **Video > Field of view** adjusts the 3D view live from
 75% to 150%; 100% is the original view. Relative aim zoom and interface size
 are preserved. The setting is saved; `MGSPO_FOV=125` overrides it for one run.
 
+## Startup (PO only)
+
+Game > Startup has two settings, off by default: **Skip logo screens** and
+**Skip opening movie**. With the second the game opens on the title menu,
+past the movie and its Press Start screen. `MGSPO_SKIP_LOGOS` and
+`MGSPO_SKIP_MOVIE` (`0` or `1`) decide for one run. Portable Ops Plus does
+not have them yet.
+
 ## Local Windows packages
 
 Windows x64 preparation covers both editions. Follow

@@ -5,6 +5,7 @@
 // EBOOT.BIN, the image size from the ELF's program headers.
 
 #include "camera.hpp"
+#include "boot_skip.hpp"
 #include "detail_distance.hpp"
 #include "fulton.hpp"
 #include "fulton_settings.hpp"
@@ -48,6 +49,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::fulton::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
+    mgs::boot_skip::install(runtime);
 }
 
 } // namespace
@@ -90,9 +92,14 @@ const GameProfile &game() {
 
         .register_extra_hle = &mgs::fulton_assets::install,
         .patch_loaded_image = &patch_image,
-        .module_code_ready = &mgs::fulton::module_ready,
-        .draw_game_settings = &mgs::fulton_settings::draw,
-        .reset_game_settings = &mgs::fulton_settings::reset,
+        .module_code_ready =
+            +[](psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
+                std::span<const std::uint8_t> code) {
+                mgs::fulton::module_ready(runtime, name, base, code);
+                mgs::boot_skip::module_ready(runtime, name, base, code);
+            },
+        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::fulton_settings::draw(); },
+        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::fulton_settings::reset(); },
         .game_settings_screen = &mgs::fulton_settings::screen,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,

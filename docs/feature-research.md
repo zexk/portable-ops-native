@@ -71,6 +71,18 @@ fast-forward behavior. No additional feature or static skip-path research
 is needed for this item. End-credit behavior is unverified and does not
 justify a separate feature without a concrete missing behavior.
 
+## 5. Startup skips
+
+PO has Game > Startup toggles for the logo screens and the opening movie
+([`boot_skip.hpp`](../profiles/po/host/boot_skip.hpp); the title scenario's
+flow is in [stage identity](../../docs/portable-ops/feature-hooks.md#title-startup-flow)).
+Bounded boots with the two environment overrides: the title actor starts
+1 s into the title stage instead of 13 s with the logos skipped, and with
+the movie skipped a captured frame shows the title menu, where the
+unskipped run shows the movie's Press Start screen. The toggles themselves
+(drawing, saving) are compiled but not exercised, nor is a return to the
+title from a game. PO+ has its own title module and is not covered.
+
 ## 6. Save states and quick resume
 
 Guest RAM alone omits state that affects the next instruction or frame:
