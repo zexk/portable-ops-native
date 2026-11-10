@@ -3,8 +3,11 @@
 #include "fulton_assets.hpp"
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
+#include "fulton_convert.hpp"
 #include "ui/file_browser.hpp"
 #include "ui/widgets.hpp"
+#include <chrono>
+#include <future>
 #include <memory>
 #endif
 
@@ -28,6 +31,26 @@ inline void reset() {
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
 inline std::unique_ptr<portablekit::ui::FileBrowser> browser;
+// A running import: reading a disc image takes seconds, so it works beside
+// the menu and reports its outcome as the row's note. Empty on success.
+inline std::future<std::string> importing;
+
+// A Peace Walker PSP disc image is converted; a folder must already hold a
+// converted bundle. Neither is needed afterwards.
+inline std::string import(const std::filesystem::path &chosen) {
+    try {
+        std::error_code error;
+        if (std::filesystem::is_directory(chosen, error)) fulton_assets::import_bundle(chosen);
+        else {
+            portablekit::IsoImage iso(chosen);
+            fulton_assets::install_files(fulton_convert::bundle(iso));
+        }
+        return {};
+    } catch (const std::exception &error) {
+        std::cerr << "[fulton] import failed: " << error.what() << std::endl;
+        return error.what();
+    }
+}
 #endif
 
 // The folder browser of "Import Fulton assets…". True while it is open.
@@ -36,17 +59,8 @@ inline bool screen([[maybe_unused]] bool back) {
     using portablekit::ui::FileBrowser;
     if (!browser) return false;
     const auto result = browser->frame(back);
-    if (result == FileBrowser::Result::Chosen) {
-        try {
-            fulton_assets::import_bundle(browser->chosen());
-            // The running game keeps its startup snapshot; only the menu learns.
-            fulton_assets::available = true;
-            fulton_assets::status = "Assets imported";
-        } catch (const std::exception &error) {
-            fulton_assets::status = "Import failed: not a converted Fulton folder";
-            std::cerr << "[fulton] import failed: " << error.what() << std::endl;
-        }
-    }
+    if (result == FileBrowser::Result::Chosen)
+        importing = std::async(std::launch::async, import, browser->chosen());
     if (result != FileBrowser::Result::Browsing) browser.reset();
     return true;
 #else
@@ -58,6 +72,13 @@ inline void draw() {
 #if defined(PORTABLEKIT_HAS_RENDERER)
     using namespace portablekit::ui;
     const bool override = portablekit::hle_extension::env("FULTON") != nullptr;
+    const bool busy = importing.valid();
+    if (busy && importing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const auto failure = importing.get();
+        // The running game keeps its startup snapshot; only the menu learns.
+        if (failure.empty()) fulton_assets::available = true;
+        fulton_assets::status = failure.empty() ? "Assets imported" : "Import failed: " + failure;
+    } else if (busy) fulton_assets::status = "Importing…";
     section("Peace Walker");
     RowOptions options;
     options.disabled = override || (!fulton_assets::available && !fulton_assets::selected);
@@ -66,15 +87,14 @@ inline void draw() {
                           "Applies after restarting the game.";
     if (toggle_row("Fulton recovery (experimental)", fulton_assets::selected, options))
         save(!fulton_assets::selected);
-    if (!override && !fulton_assets::available &&
+    if (!override && !fulton_assets::available && !importing.valid() &&
         button_row("Import Fulton assets…",
-                   {false, {}, "Choose a folder of converted Fulton assets, the one that holds fult_enemy.mtar. "
-                               "They are checked and copied into the game's own data; the folder is not "
-                               "needed afterwards. Importing does not turn Fulton on."})) {
+                   {false, {}, "Choose your Peace Walker PSP disc image (.iso), or a folder of already converted "
+                               "Fulton assets. What Fulton needs is converted and copied into the game's own "
+                               "data; the image is not changed and not needed afterwards. Importing does not "
+                               "turn Fulton on."})) {
         FileBrowser::Options browse;
-        browse.extensions = {};
-        browse.filter_name = browse.listed_name = "folders";
-        browse.empty_note = "No folders here.";
+        browse.empty_note = "No folders or disc images here.";
         browse.choose_folder = "Import from this folder";
         browse.choose_on_open = [](const std::filesystem::path &folder) {
             std::error_code error;

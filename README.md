@@ -137,9 +137,9 @@ Each feature belongs in the Game tab, with its toggle available only when
 its required assets have been imported and validated. Import does not turn
 features on. See [project rules](AGENTS.md) for the full requirements.
 
-Fulton currently remains a developer prototype. Converted bundles can be
-installed separately from their donor source, then enabled in the Game tab.
-Direct PSP ISO and MC import are pending. The workflow below is for development.
+Fulton is experimental. Its assets are imported in the Game tab from a
+local Peace Walker PSP disc image, then the feature is enabled there.
+Import from a Master Collection installation is pending.
 
 ### Converted Fulton bundle
 
@@ -159,11 +159,15 @@ without blocking PO; the saved selection is kept. Restore game defaults
 turns the selection off.
 
 While assets are missing or invalid, **Import Fulton assets…** in the same
-section opens the folder browser. Choosing a bundle folder (the one holding
-`fult_enemy.mtar`) checks and copies those named files into `pw/fulton`, and
-checks the copy before it replaces anything. It does not change the
-selection, and the source folder is not needed afterwards. It takes
-converted bundles only, not a raw PW ISO or MC installation.
+section opens the file browser. Choosing a Peace Walker PSP disc image
+(`.iso`) converts what Fulton needs on a background thread: the models and
+texture packs from the disc's SLOT container, the lift and attach motions
+and the sound banks from its stage container. A folder that already holds a
+converted bundle is accepted too. Either way the files are written to a
+staging folder and checked before they replace `pw/fulton`. The image is
+only read, the selection is not changed, and the source is not needed
+afterwards. Checked with EU `ULES-01372` 1.01; other regions are unverified.
+A PSP disc yields no soldier grunt for the attach, so that one cue is absent.
 
 `MGSPO_FULTON_STAGE_DIR` can override the bundle directory for developer
 tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
@@ -174,18 +178,24 @@ toggle is locked while this override is present.
 Checks without a game or renderer:
 
 ```sh
-python3 scripts/prepare-fulton-assets.py --self-test
 c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
     scripts/test-fulton-assets.cpp portablekit/src/sha256.cpp \
     portablekit/host/install/user_data.cpp portablekit/host/profile.cpp \
     portablekit/host/app_paths.cpp portablekit/tests/test_profile.cpp \
     -o out/test-fulton-assets
 out/test-fulton-assets
+c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_party \
+    scripts/test-pw-slot.cpp portablekit/src/sha256.cpp \
+    portablekit/host/kernel/iso_image.cpp -o out/test-pw-slot
+out/test-pw-slot                  # conversions on synthetic data
+out/test-pw-slot PW.iso [OUTPUT]  # whole bundle from a local ULES-01372 image
 ```
 
-Bundle checks and a Linux port build pass. The Game-tab toggle and import
-were checked in game on Linux (ULUS-10202); conversion from both raw donor
-formats remains unverified.
+Bundle checks and a Linux port build pass. The Game-tab toggle and both
+imports were checked in game on Linux (ULUS-10202). Seven of the nine files
+converted from the disc image are byte for byte what the earlier Python
+tools produced; the two effect banks were confirmed by ear. Conversion from
+a Master Collection installation does not exist yet.
 
 ## Optional Fulton prototype (PO only)
 
@@ -268,19 +278,6 @@ growth start together at 260/375 of the attach, the harness stays upright
 and grows with the balloon, and both follow the soldier's spine into the
 sky. The visible body slide still needs animation/root-bone analysis. Missing
 or invalid bone matrices use the saved enemy position and a rigid fallback.
-
-Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
-`fult_item_body.mdp/.txp` from PW PSP, `fult_enemy.mtar`, and optionally
-`segrp_75_furuton.sep`, `fult_place.mtar`, `fulton-lift.sep` and
-`fulton-foley.sep`. The optional
-placement archive comes from metal-gear's `mtar.py`, `--clip 156` of PW's
-`snake_coop.mtar`. The script converts the TXPs to PO's layout, renames
-textures the two packs share and renumbers the sound bank, writing a bundle
-folder for the Game tab's import:
-
-```sh
-python3 scripts/prepare-fulton-assets.py ASSET_DIRECTORY OUTPUT
-```
 
 `MGSPO_FULTON_TRACE_MOTION=1` logs every motion request and the player's
 motion channels (two 0x80-byte layers). Position Snake facing

@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -79,23 +80,22 @@ inline void check(const std::filesystem::path &root) {
     for (const auto &file : files) read(root, file);
 }
 
-// Copies a converted bundle into the port's user data: the named files and
-// nothing else. The copy is checked before it replaces anything. Selection
-// and the running game are untouched.
-inline void import_bundle(const std::filesystem::path &source) {
+// Installs bundle files (name -> bytes) into the port's user data: the named
+// files and nothing else. The copy is checked before it replaces anything.
+// Selection and the running game are untouched.
+inline void install_files(const std::map<std::string, std::vector<std::uint8_t>> &bundle) {
     namespace fs = std::filesystem;
     const auto destination = portablekit::install::user_data_directory() / "pw" / "fulton";
-    std::error_code ignored;
-    if (fs::equivalent(source, destination, ignored)) throw std::runtime_error("Folder is already the installed one");
     const auto staged = destination.parent_path() / ".fulton-import";
+    std::error_code ignored;
     fs::remove_all(staged);
     fs::create_directories(staged);
     try {
         for (const auto &file : files) {
-            const auto bytes = read(source, file);
-            if (bytes.empty()) continue;
+            const auto found = bundle.find(file.name);
+            if (found == bundle.end() || found->second.empty()) continue;
             std::ofstream output(staged / file.name, std::ios::binary);
-            output.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size()));
+            output.write(reinterpret_cast<const char *>(found->second.data()), std::streamsize(found->second.size()));
             if (!output.flush()) throw std::runtime_error(std::string("Cannot write ") + file.name);
         }
         check(staged);
@@ -105,6 +105,16 @@ inline void import_bundle(const std::filesystem::path &source) {
         fs::remove_all(staged, ignored);
         throw;
     }
+}
+
+// Installs a folder that already holds a converted bundle.
+inline void import_bundle(const std::filesystem::path &source) {
+    std::error_code ignored;
+    if (std::filesystem::equivalent(source, portablekit::install::user_data_directory() / "pw" / "fulton", ignored))
+        throw std::runtime_error("Folder is already the installed one");
+    std::map<std::string, std::vector<std::uint8_t>> bundle;
+    for (const auto &file : files) bundle[file.name] = read(source, file);
+    install_files(bundle);
 }
 
 inline void load() {

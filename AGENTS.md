@@ -29,9 +29,9 @@ to Portable Ops Native.
   conversion from both sources, operation after removing the donor source,
   and Game-tab enable/disable behavior with valid and missing assets.
 
-Fulton has an experimental Game-tab toggle and a Game-tab import of converted
-bundles. Donors load from memory in every stage; no stage file is replaced.
-Its PSP donor preparation (`scripts/prepare-fulton-assets.py`) is a developer
-tool, not a player-facing importer.
-Direct PSP ISO and MC imports remain pending; this pipeline is not yet
-production-ready.
+Fulton has an experimental Game-tab toggle and a Game-tab import that
+converts a PW PSP disc image in the port itself (`pw_slot.hpp`,
+`fulton_convert.hpp`; `scripts/test-pw-slot.cpp` checks it against a local
+image). Donors load from memory in every stage; no stage file is replaced.
+Import from a PW Master Collection installation remains pending, so this
+pipeline is not yet production-ready.

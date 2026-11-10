@@ -8,7 +8,7 @@
 // (sound id = first id + cue). Bank 0x31 is PO's own segrp_75 slot: one sound,
 // id 0x271 (an ATRAC3plus record), up to 0x8000 bytes; no stage loads it.
 // PW's Fulton bank has the same container and one ATRAC3plus cue;
-// prepare-fulton-assets.py renumbers it 0x0D1F -> 0x31 and writes fulton.sep.
+// the importer renumbers it 0x0D1F -> 0x31 and writes fulton.sep.
 //
 // Loading: the bank lives in the engine heap (0x3A478, pool 0), which a stage
 // load resets: a bank filed earlier is overwritten by that stage's own banks.
