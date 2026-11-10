@@ -383,3 +383,20 @@ to the finished picture (update about 5 ms, display lists about 4 ms),
 against 2 to 3 ms in menus. The pad's age at the finished picture went
 from two game frames (100 ms in play) to that work time. Physical latency
 remains unmeasured.
+
+**Camera sampling with controller pacing** (2026-11-10, ULUS-10202
+1.02, Linux). With both response settings enabled, the host camera now
+samples input and applies its turn after the real-time wait at the
+controller read, before the game's next update. Previously it applied
+the previous turn at presentation, before that wait. The normal path
+keeps its camera step at presentation. The user reports the camera and
+other behavior look good; Prediction still introduces judder.
+
+The pacing trace now separates display-list and intervening-present
+time. In 692 gameplay frames, pad-to-picture time was 10.1 ms median,
+12.1 ms p90 and 14.6 ms p99. Mean 9.7 ms comprised 3.9 ms display
+lists, 0.4 ms intervening presents and 5.3 ms other work. Steady gameplay
+held about 144 presents/s at normal speed, with no skipped presents in
+the 100% Prediction section. Prediction corrections remain a suspected
+cause of judder, not established by this trace. Physical latency,
+other games and other platforms remain unverified.
