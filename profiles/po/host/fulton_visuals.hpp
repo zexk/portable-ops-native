@@ -106,7 +106,10 @@ inline std::vector<std::uint32_t> extra_sounds(Phase phase, float cursor, float 
 }
 
 // PO control starts at enemy +0x20: current/target yaw at +0x42/+0x4A.
-// Approach the player's heading +90 degrees while extraction owns the pose.
+// PW (MC PE 0x6AA628A0 sync capture) turns the player to face the soldier's
+// root and the soldier to that direction +90 degrees, both by one eighth of
+// the rest a tick, about fixed roots: its visible slide is that pivot.
+// The player's control is taken to share the layout (+0x132/+0x13A).
 template<class Memory>
 void face_player(Memory &memory) {
     if (!state.old_yaw) {
@@ -116,6 +119,10 @@ void face_player(Memory &memory) {
     state.owned_yaw = {fulton_geometry::turn(state.owned_yaw[0], state.yaw), state.yaw};
     memory.store16(state.enemy + 0x62u, state.owned_yaw[0]);
     memory.store16(state.enemy + 0x6au, state.yaw);
+    if (state.phase > Phase::Attaching) return; // Snake's heading is his again
+    const std::uint16_t toward = state.yaw - 0x4000u;
+    memory.store16(state.player + 0x132u, fulton_geometry::turn(memory.load16(state.player + 0x132u), toward));
+    memory.store16(state.player + 0x13au, toward);
 }
 
 template<class Memory>
@@ -362,7 +369,16 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
     state.phase = Phase::Preparing;
     state.player = player;
     state.enemy = enemy;
-    state.yaw = std::uint16_t(runtime.memory().load16(player + 0x132u) + 0x4000u);
+    {
+        auto &memory = runtime.memory();
+        auto at = [&memory](std::uint32_t address) { return std::bit_cast<float>(memory.load32(address)); };
+        const float x = at(enemy + 0x30u) - at(player + 0x100u), z = at(enemy + 0x38u) - at(player + 0x108u);
+        // On top of him no direction exists: keep the player's own heading.
+        const auto toward = std::hypot(x, z) > 1.0f
+            ? std::uint16_t(std::int32_t(std::lround(std::atan2(x, z) * (65536.0f / 6.2831853f))))
+            : memory.load16(player + 0x132u);
+        state.yaw = std::uint16_t(toward + 0x4000u);
+    }
     state.finish = std::move(finish);
     const auto saved = ctx;
     auto &memory = runtime.memory();
