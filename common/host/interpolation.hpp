@@ -21,6 +21,8 @@ inline constexpr portablekit::gpu::interpolation::CutThresholds kInterpolationTh
     // was drawn: a draw only the newer frame has there is another model of
     // something the older frame drew (a guard changing its level of detail).
     .bring_edge = 1.0f,
+    // The item and weapon windows, menus and markers are through-mode sprites.
+    .through = true,
 };
 
 } // namespace mgs
