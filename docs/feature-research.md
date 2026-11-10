@@ -419,3 +419,25 @@ orbit, recentre and rule restoration pass the stand-in runtime check in
 `scripts/test-camera.cpp`. The user confirmed the fix works in PO on
 Linux with both response settings enabled. PO+ and other platforms remain
 unverified live.
+
+## 17. Thermal and night-vision goggles
+
+PO ULUS-10202 1.02, Linux, 2026-11-10. Thermal produced a black image and
+night vision flashed black and white. Both paths sample rendered buffers
+as unswizzled CLUT16 textures, including screen buffers `0x04000000` and
+`0x04044000` and scratch buffer `0x04088000`. The renderer previously
+rejected indexed framebuffer views and decoded stale guest memory.
+
+PortableKit now samples matching CLUT16/CLUT32 framebuffer views on the
+GPU, reconstructs packed source pixels and applies the palette's shift,
+mask and bank. Palette lookup precedes linear filtering. Palettes use
+the existing texture cache and remain bound during interpolation replay.
+`MGSPO_NO_FB_PALETTES=1` restores the previous path for comparison.
+
+The user confirmed both effects render with the fix, but reported poor
+visibility. Original-rendering contrast and brightness remain unverified;
+neither was tuned. The trace maintained about 144 presents/s at normal
+game speed during steady play, with no renderer errors logged. PO build,
+renderer helper, texture-pack and interpolation tests pass. Other games,
+platforms, swizzled framebuffer views and CLUT4/CLUT8 framebuffer views
+remain unverified or unsupported by the new path.
