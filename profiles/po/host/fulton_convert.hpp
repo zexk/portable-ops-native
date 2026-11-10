@@ -99,4 +99,57 @@ inline std::map<std::string, Bytes> models(const std::map<std::uint32_t, Bytes> 
     }
     return out;
 }
+// PO's 19-joint humanoid: joint name hashes and each joint's parent (255 for
+// the root), as every PO soldier and player motion archive lists them. PW
+// names its joints differently but orders and parents them the same.
+constexpr std::uint32_t joint_names[19] = {
+    0x72662d, 0x39e5be, 0x35d6ac, 0xc7226c, 0xc42227, 0xcb693c, 0xcc4e45, 0xc4ce85, 0xc5ce7c, 0x2b713d,
+    0x2c5646, 0x24d686, 0x25d67d, 0x7f1c41, 0xc63f64, 0xc5162c, 0x801c4d, 0xc93fa4, 0x251e2d};
+constexpr std::uint8_t joint_parents[19] = {255, 0, 1, 2, 3, 2, 5, 6, 7, 2, 9, 10, 11, 0, 13, 14, 0, 16, 17};
+
+// Clips of a PW PSP motion archive as one PO Mtar. A PW archive may declare
+// more joints than a clip animates (enedam declares 38, its clips use the
+// first 19); each clip must animate exactly PO's joints in PO's order and
+// hierarchy. PO indexes joints implicitly, so the clip's two PW byte tables
+// are dropped and its header, offset table and compressed tracks are kept
+// byte for byte. PW's separate effector data is not carried over.
+inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::uint32_t> clips) {
+    constexpr std::uint32_t joints = 19, head = 64 + joints * 4;
+    const std::uint32_t declared = get(pw, 8, 2), motions = get(pw, 10, 2), body = get(pw, 16), table = get(pw, 28);
+    if (get(pw, 0) != 0x7261744du || get(pw, 12) != 0x10000u || declared < joints)
+        throw std::runtime_error("Unsupported PW motion archive");
+    std::vector<Bytes> blocks;
+    for (auto clip : clips) {
+        if (clip >= motions) throw std::runtime_error("PW motion archive lacks a clip");
+        const std::uint64_t at = std::uint64_t(body) + get(pw, table + clip * 16ull), size = get(pw, table + clip * 16ull + 4);
+        if (size < head + joints * 2 || at + size > pw.size()) throw std::runtime_error("PW clip is outside its archive");
+        const auto block = pw.subspan(at, size);
+        const std::uint32_t kind = get(block, 4), tracks = get(block, 16), units = get(block, 20);
+        if ((kind != 0x36u && kind != 0x436u) || get(block, 8) != 5 || !get(block, 12) || get(block, 24) != joints ||
+            get(block, 0x2e, 2) != head || tracks != head + joints * 2 || std::uint64_t(tracks) + units * 2ull > size)
+            throw std::runtime_error("PW clip has an unsupported encoding or layout");
+        for (std::uint32_t joint = 0; joint < joints; ++joint)
+            if (block[head + joint] != joint || block[head + joints + joint] != joint_parents[joint] ||
+                get(block, 64 + joint * 4) > units)
+                throw std::runtime_error("PW clip does not animate PO's skeleton");
+        for (std::uint32_t tail = 0; tail < 4; ++tail)
+            if (get(block, 0x30 + tail * 4) > units) throw std::runtime_error("PW clip track is outside its data");
+        Bytes converted(block.begin(), block.begin() + head);
+        put(converted, 0x10, head);
+        converted[0x2e] = converted[0x2f] = 0;
+        converted.insert(converted.end(), block.begin() + tracks, block.begin() + tracks + units * 2);
+        converted.resize((converted.size() + 15) & ~std::size_t(15));
+        blocks.push_back(std::move(converted));
+    }
+    const std::uint32_t body_at = (32 + joints * 8 + std::uint32_t(blocks.size()) * 8 + 15) & ~15u;
+    Bytes out;
+    append(out, {0x7261744du, joints, std::uint32_t(blocks.size()), body_at, 0x10000u, 0, 0, 0});
+    for (auto name : joint_names) append(out, {name});
+    for (auto parent : joint_parents) append(out, {parent == 255 ? 0u : joint_names[parent]});
+    std::uint32_t at = 0;
+    for (const auto &block : blocks) { append(out, {at, std::uint32_t(block.size())}); at += std::uint32_t(block.size()); }
+    out.resize(body_at);
+    for (const auto &block : blocks) out.insert(out.end(), block.begin(), block.end());
+    return out;
+}
 } // namespace mgs::fulton_convert

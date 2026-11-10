@@ -34,6 +34,36 @@ int main(int argc, char **argv) {
         try { txp(pw); assert(false); } catch (const std::runtime_error &) {}
         std::cout << "PW texture pack conversion passed\n";
     }
+    {
+        // One PW clip over PO's 19 joints in an archive declaring 38.
+        using namespace mgs::fulton_convert;
+        const auto archive = [](std::uint32_t kind, std::uint8_t root_parent) {
+            Bytes clip;
+            append(clip, {123, kind, 5, 30, 64 + 19 * 4 + 38, 2, 19, 0, 0, 0, 0, std::uint32_t(64 + 19 * 4) << 16, 0, 0, 0, 0});
+            clip.resize(64 + 19 * 4);
+            for (std::uint8_t joint = 0; joint < 19; ++joint) clip.push_back(joint);
+            for (auto parent : joint_parents) clip.push_back(parent);
+            clip[64 + 19 * 4 + 19] = root_parent;
+            for (char c : {'p', 'o', 's', 'e'}) clip.push_back(std::uint8_t(c));
+            Bytes pw;
+            const std::uint32_t table = 32 + 38 * 4;
+            append(pw, {0x7261744d, 0, 38u | 1u << 16, 0x10000, table + 16, 0, 32, table});
+            pw.resize(table);
+            append(pw, {0, std::uint32_t(clip.size()), 0, 0});
+            pw.insert(pw.end(), clip.begin(), clip.end());
+            return pw;
+        };
+        const auto po = mtar(archive(0x436, 255), {0});
+        const std::uint32_t body = get(po, 12);
+        assert(get(po, 4) == 19 && get(po, 8) == 1 && body == 192 && get(po, 16) == 0x10000);
+        assert(get(po, 32) == joint_names[0] && get(po, 32 + 76) == 0 && get(po, 32 + 80) == joint_names[0]);
+        assert(get(po, body + 16) == 140 && get(po, body + 0x2e, 2) == 0 && po[body + 140] == 'p');
+        assert(po.size() == body + 144 && po.size() % 16 == 0);
+        for (const auto &bad : {archive(0x3e, 255), archive(0x36, 3)})
+            try { mtar(bad, {0}); assert(false); } catch (const std::runtime_error &) {}
+        try { mtar(archive(0x36, 255), {1}); assert(false); } catch (const std::runtime_error &) {}
+        std::cout << "PW motion archive conversion passed\n";
+    }
     if (argc < 2) return 0;
     const std::pair<std::uint32_t, const char *> expected[] = {
         {0x14f66bb7u, "1f83806787febd7d89392a0dba52bf27d283dcd29aaa77b6c3dfa542ec7af5ad"}, // fult_item_balloon.txp
@@ -66,5 +96,23 @@ int main(int argc, char **argv) {
         std::cout << name << ' ' << digest << '\n';
         assert(digest == hash);
     }
-    std::cout << "PW slot extraction and model conversion passed\n";
+    // Motions: the first stage archive of each name whose clips convert.
+    mgs::fulton_convert::Bytes lift, place;
+    unsigned archives = 0;
+    mgs::pw_slot::stage_files(iso, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
+        try {
+            if (lift.empty() && name == "enedam.mtar") { ++archives; lift = mgs::fulton_convert::mtar(bytes, {101, 103}); }
+            if (place.empty() && name == "snake_coop.mtar") { ++archives; place = mgs::fulton_convert::mtar(bytes, {156}); }
+        } catch (const std::runtime_error &) {}
+        return !lift.empty() && !place.empty();
+    });
+    std::cout << "motion archives tried " << archives << '\n';
+    for (const auto &[bytes, hash] : {
+             std::pair{&lift, "5fc52d5c4234d551231b34310875270d7e497b49848bdb8442a7c7dab7b9ff03"},   // fult_enemy.mtar
+             std::pair{&place, "a82f6e3d55b77e8d982764cf6005f1e7167f1095ad751ef53359b6eb07ee3e56"}}) { // fult_place.mtar
+        const auto digest = psprecomp::sha256_bytes(*bytes);
+        std::cout << bytes->size() << ' ' << digest << '\n';
+        assert(digest == hash);
+    }
+    std::cout << "PW extraction, model and motion conversion passed\n";
 }
