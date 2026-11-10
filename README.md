@@ -202,9 +202,7 @@ Other voice families and two remaining attachment cues remain unmapped.
 Body placement now eases the soldier toward Snake's starting heading +90
 degrees along the shortest arc. The one-eighth-per-tick easing approximates
 the PW capture; its exact integer rule remains unmapped. The actor root
-position stays unchanged, as observed in PW. Harness orientation follows
-the two bone points during attachment, then stays fixed while its origin
-follows bone 2 during lift. Live testing found rotation broadly similar to
+position stays unchanged, as observed in PW. The harness origin follows bone 2. Live testing found rotation broadly similar to
 PW. Following a frame-linked PW trace, the lift clip, balloon sound and
 growth start together at 260/375 of the attach, the harness stays upright
 and grows with the balloon, and both follow the soldier's spine into the
