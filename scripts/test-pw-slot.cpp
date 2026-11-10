@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
             const auto &sound = bundle.at(name);
             const auto sample = mgs::fulton_convert::get(sound, 16);
             assert(sound.size() <= 0x8000 && mgs::fulton_convert::get(sound, 0x34) == 0x01010000u);
-            assert(mgs::fulton_convert::get(sound, sample + 4) == (12000u << 16 | 0x1000u));
+            assert(mgs::fulton_convert::get(sound, sample + 4) == (12000u << 16 | 0x45au));
             assert(std::abs(int(mgs::fulton_convert::get(sound, 0x30 + 24)) - 4357) <= 3); // 192,144 samples
             continue;
         }
@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
                 const auto sample = get(sound, 16) + get(sound, get(sound, 12) + i * 8);
                 const auto bytes = get(sound, sample);
                 assert(bytes && bytes % 16 == 0 && sample + 8 + bytes <= get(sound, 20));
-                assert(get(sound, sample + 4) == (rate << 16 | 0x1000u));
+                assert(get(sound, sample + 4) == (rate << 16 | rate * 0x1000u / 44100u));
                 assert(sound[sample + 8 + bytes - 15] == 1);
                 const auto frames = bytes / 16 * 28;
                 assert(std::abs(int(frames * 1000ull / rate) - int(get(sound, 0x30 + i * 32 + 24))) <= 3);

@@ -148,7 +148,8 @@ inline Bytes bank(const std::vector<Clip> &clips, std::uint16_t id, unsigned rat
         for (auto value : {0x407fu, 0x01010000u, i * 8, 0u, 0u, 0u,
                            std::uint32_t((samples.size() * 1000ull + rate / 2) / rate), 0u}) append(records, value);
         append(keys, std::uint32_t(payload.size())); append(keys, 0);
-        append(payload, std::uint32_t(encoded.size())); append(payload, rate << 16 | 0x1000u);
+        // Low word is the playback pitch, 0x1000 at 44.1 kHz (PW grunt: 15,750 Hz, 0x5B6).
+        append(payload, std::uint32_t(encoded.size())); append(payload, rate << 16 | rate * 0x1000u / 44100u);
         payload.insert(payload.end(), encoded.begin(), encoded.end());
     }
     const auto voice = (data + std::uint32_t(payload.size()) + 15) & ~15u;
