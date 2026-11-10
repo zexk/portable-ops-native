@@ -296,6 +296,33 @@ int main(int argc, char **argv) {
     assert(memory.load32(block) == 0x09900000u && memory.load32(channel + 0xc8) == 0x123456u);
     assert(guest_calls.empty());
     assert(lifetime.use_count() == 1); // Completion releases the callback chain.
+    // Death/retry reuses the module: clear Fulton before the stage clears BSS,
+    // without handing stale motion requests or render objects back to the game.
+    mgs::fulton_visuals::state.phase = mgs::fulton_visuals::Phase::Settle;
+    mgs::fulton_visuals::state.snake = motion;
+    mgs::fulton_visuals::state.snake.active = true;
+    mgs::fulton_visuals::state.object = 0x09b60000u;
+    mgs::fulton_visuals::state.finish = [](auto &, bool) { assert(false); };
+    mgs::fulton_visuals::selecting_motion = true;
+    mgs::fulton_visuals::placement_prepared = mgs::fulton_visuals::donors_prepared = true;
+    mgs::fulton_sound::current = mgs::fulton_sound::lift_current = mgs::fulton_sound::foley_current = true;
+    held = busy = true;
+    watch_work = work; watch_frames = 90;
+    original_stage_init = [](auto &, auto &) {
+        assert(mgs::fulton_visuals::state.phase == mgs::fulton_visuals::Phase::Idle);
+        assert(!mgs::fulton_visuals::state.finish && !mgs::fulton_visuals::state.snake.active);
+        assert(mgs::fulton_visuals::learned.empty());
+        assert(!mgs::fulton_visuals::selecting_motion);
+        assert(!mgs::fulton_visuals::placement_prepared && !mgs::fulton_visuals::donors_prepared);
+        assert(!mgs::fulton_sound::current && !mgs::fulton_sound::lift_current && !mgs::fulton_sound::foley_current);
+        assert(!held && !busy && !watch_work && !watch_frames);
+        assert(guest_calls.empty());
+        ++resets;
+    };
+    stage_init(runtime, context);
+    assert(resets == 2);
+    stage_init(runtime, context); // Initial load and repeated retries are safe.
+    assert(resets == 3);
     // Optional lift effects must layer through the game's normal sound call.
     mgs::fulton_sound::lift_current = true;
     returned = false;

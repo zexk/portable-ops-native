@@ -160,14 +160,35 @@ bool appended(const Memory &memory, std::uint32_t system, std::uint32_t before, 
 }
 
 inline psprecomp::Runtime::RecompiledFunction original_update = nullptr;
+inline psprecomp::Runtime::RecompiledFunction original_stage_init = nullptr;
 inline std::uint32_t notify = 0, cleanup = 0;
 inline bool held = false, busy = false;
 inline std::uint32_t watch_work = 0; inline unsigned watch_frames = 0; // post-capture trace
 
-inline void module_ready(psprecomp::Runtime &, std::string_view name, std::uint32_t base,
+inline void reset_stage() {
+    fulton_visuals::invalidate();
+    fulton_sound::stage_changed();
+    held = busy = false;
+    watch_work = watch_frames = 0;
+}
+
+// ULUS-10202 1.02: the stage's first function clears its BSS. Mission retry
+// calls it again without loading a module. Drop old heap/actor addresses
+// before that reset; disposing them would call the engine on freed resources.
+inline void stage_init(psprecomp::CorpusRuntime &runtime, psprecomp::AllegrexContext &ctx) {
+    reset_stage();
+    original_stage_init(runtime, ctx);
+}
+
+inline void module_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                          std::span<const std::uint8_t> code) {
     if (!original_update) return;
-    if (name == "mgp_stage") { fulton_visuals::invalidate(); fulton_sound::stage_changed(); busy = false; }
+    if (name == "mgp_stage") {
+        reset_stage();
+        original_stage_init = runtime.registered_function(base);
+        if (original_stage_init)
+            runtime.register_function(base, &stage_init, "po_fulton_stage_init");
+    }
     const auto n = find(code, notify_shape), c = find(code, cleanup_shape);
     if (!n || !c) return;
     notify = base + *n;
