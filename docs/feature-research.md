@@ -185,7 +185,8 @@ mission names and application integration still need mapping.
 A local state provider now exists: [`presence.hpp`](../common/host/presence.hpp)
 wraps the stage request in PO and all three PO+ editions and keeps the
 last requested stage name. A bounded PO boot logged `init`, `r_main01` and
-`title` in that order; PO+ is not yet run. Area names come from the
+`title` in that order, and so did PO+ US; EU and JP are compiled only. Area
+names come from the
 twenty-entry table every scenario carries; that entry N names `st<N+1>`
 is inferred from the online maps and unconfirmed in game (see the stage
 identity section linked above). Nothing consumes the state yet: a Discord
