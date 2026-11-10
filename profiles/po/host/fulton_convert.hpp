@@ -1,6 +1,9 @@
 #pragma once
 
-// Peace Walker PSP Fulton resources to the port's converted bundle files.
+// Peace Walker Fulton resources to the port's converted bundle files. The
+// Master Collection holds the PSP formats with their offsets widened to 64
+// bits and tables padded to match ("wide" below); pixels, vertices and motion
+// headers are otherwise the PSP ones.
 #include "pw_slot.hpp"
 
 #include <algorithm>
@@ -38,29 +41,99 @@ inline void append(Bytes &bytes, std::initializer_list<std::uint32_t> words) {
 // {0x10, hash, 0, h << 16 | w, 0, image, 0, u, v, su, sv, 0}. Every PO image
 // owns its CLUT, so each PW texture gets its own image entry. PO's loader
 // crashes on the PW layout (it relocates the pointers twice).
-inline Bytes txp(std::span<const std::uint8_t> pw) {
-    const std::uint32_t images = get(pw, 8), textures = get(pw, 12), image_table = get(pw, 20),
-                        texture_table = get(pw, 24), data = get(pw, 28);
+// Wide: header tables at +0x18, +0x20, +0x28; image (0x20) pixels at +0x10;
+// texture (0x30) {flags, hash, u64 image, u64 clut, u, v, su, sv, wh, 0}.
+inline Bytes txp(std::span<const std::uint8_t> pw, bool wide = false) {
+    const std::uint32_t images = get(pw, 8), textures = get(pw, 12), image_table = get(pw, wide ? 0x18 : 20),
+                        texture_table = get(pw, wide ? 0x20 : 24), data = get(pw, wide ? 0x28 : 28);
     if (!images || !textures || textures > 256 || image_table < 0x20 || image_table >= texture_table ||
         texture_table >= data || data > pw.size())
-        throw std::runtime_error("Not a PW PSP texture pack");
+        throw std::runtime_error("Not a PW texture pack");
     const std::uint32_t new_data = (0x20u + textures * 0x40u + 15u) & ~15u;
     Bytes out, records;
     append(out, {0, 1, textures, 0x20, textures, 0x20 + textures * 0x10, 0, 0});
     for (std::uint32_t i = 0; i < textures; ++i) {
-        const std::size_t texture = texture_table + 0x28u * i;
-        const std::uint32_t image = get(pw, texture + 8), clut = get(pw, texture + 12), pixels = get(pw, image + 12);
+        const std::size_t texture = texture_table + (wide ? 0x30u : 0x28u) * i, uv = texture + (wide ? 24 : 16);
+        const std::uint32_t image = get(pw, texture + 8), clut = get(pw, texture + (wide ? 16 : 12)),
+                            pixels = get(pw, image + (wide ? 16 : 12));
         if (pixels < data || pixels >= pw.size() || clut < data || clut >= pw.size())
             throw std::runtime_error("PW texture offsets are outside its data");
         append(out, {get(pw, image + 4, 2) << 16 | get(pw, image + 2, 2), get(pw, image, 2),
                      pixels - data + new_data, clut - data + new_data});
-        append(records, {0x10, get(pw, texture + 4), 0, get(pw, texture + 32), 0, 0x20 + 0x10 * i, 0,
-                         get(pw, texture + 16), get(pw, texture + 20), get(pw, texture + 24),
-                         get(pw, texture + 28), 0});
+        append(records, {0x10, get(pw, texture + 4), 0, get(pw, uv + 16), 0, 0x20 + 0x10 * i, 0,
+                         get(pw, uv), get(pw, uv + 4), get(pw, uv + 8), get(pw, uv + 12), 0});
     }
     out.insert(out.end(), records.begin(), records.end());
     out.resize(new_data);
     out.insert(out.end(), pw.begin() + data, pw.end());
+    return out;
+}
+
+// A Master Collection model (MDPX) in the PSP layout PO loads (MDP). Both are
+// header, bone records, part records, one mesh table per part, the vertex
+// data and a table of materials. MDPX widens the header's two offsets, each
+// part's three and each mesh's two, so its records are longer and everything
+// behind them sits further in; vertex and material bytes are the same. The
+// PSP exporter leaves a run of zeros between vertices and materials that
+// nothing points at; it is not reproduced.
+inline Bytes mdp(std::span<const std::uint8_t> wide) {
+    const std::uint32_t bones = get(wide, 8), parts = get(wide, 12), bone_table = get(wide, 0x20),
+                        part_table = get(wide, 0x28);
+    if (get(wide, 0) != 0x5850444du || !parts || parts > 256 || bones > 256) throw std::runtime_error("Not a PW model");
+    for (std::size_t at : {0x18u, 0x1cu, 0x24u, 0x2cu, 0x34u, 0x38u, 0x3cu, 0x40u, 0x44u, 0x48u, 0x4cu})
+        if (get(wide, at)) throw std::runtime_error("PW model header has fields this converter does not know");
+    Bytes out{'M', 'D', 'P', ' '};
+    out.insert(out.end(), wide.begin() + 4, wide.begin() + 0x18);
+    const std::uint32_t new_parts = 0x50 + bones * 16;
+    append(out, {0x50, new_parts, get(wide, 0x30), 0, 0, 0});
+    out.insert(out.end(), wide.begin() + 0x50, wide.begin() + 0x70);
+    if (std::uint64_t(bone_table) + bones * 16ull > wide.size()) throw std::runtime_error("PW model is truncated");
+    out.insert(out.end(), wide.begin() + bone_table, wide.begin() + bone_table + bones * 16);
+
+    // Where everything lands: tables after the parts, each on a 16-byte
+    // boundary, then the vertex data, then the materials.
+    std::uint32_t cursor = new_parts + parts * 80, vertices = 0xffffffffu, materials = 0, materials_end = 0;
+    std::vector<std::uint32_t> tables(parts);
+    for (std::uint32_t part = 0; part < parts; ++part) {
+        const std::size_t at = part_table + part * 0x70ull;
+        if (get(wide, at + 0x14) || get(wide, at + 0x1c) || get(wide, at + 0x24) || get(wide, at + 0x2c) ||
+            get(wide, at + 0x30) || get(wide, at + 0x34) || get(wide, at + 0x38) || get(wide, at + 0x3c))
+            throw std::runtime_error("PW model part has fields this converter does not know");
+        cursor = (cursor + 15) & ~15u;
+        tables[part] = cursor;
+        cursor += get(wide, at + 8) * 12;
+        vertices = std::min(vertices, get(wide, at + 0x18));
+        if (part && get(wide, at + 0x20) != materials) throw std::runtime_error("PW model parts disagree on materials");
+        materials = get(wide, at + 0x20);
+        for (std::uint32_t mesh = 0; mesh < get(wide, at + 8); ++mesh)
+            materials_end = std::max(materials_end, get(wide, get(wide, at + 0x10) + mesh * 24ull + 16) + 24);
+    }
+    if (vertices > materials || materials > materials_end || materials_end > wide.size() || materials_end - materials > 0x10000)
+        throw std::runtime_error("PW model regions are out of order");
+    const std::uint32_t new_vertices = (cursor + 15) & ~15u,
+                        new_materials = (new_vertices + (materials - vertices) + 15) & ~15u;
+    for (std::uint32_t part = 0; part < parts; ++part) {
+        const std::size_t at = part_table + part * 0x70ull;
+        out.insert(out.end(), wide.begin() + at, wide.begin() + at + 12);
+        append(out, {tables[part], get(wide, at + 0x18) - vertices + new_vertices, new_materials, get(wide, at + 0x28), 0});
+        out.insert(out.end(), wide.begin() + at + 0x40, wide.begin() + at + 0x70);
+    }
+    for (std::uint32_t part = 0; part < parts; ++part) {
+        const std::size_t at = part_table + part * 0x70ull, table = get(wide, at + 0x10);
+        out.resize(tables[part]);
+        for (std::uint32_t mesh = 0; mesh < get(wide, at + 8); ++mesh) {
+            const std::size_t entry = table + mesh * 24ull;
+            const std::uint32_t data = get(wide, entry + 8), material = get(wide, entry + 16);
+            if (get(wide, entry + 4) || get(wide, entry + 12) || get(wide, entry + 20) || data < vertices ||
+                data >= materials || material < materials)
+                throw std::runtime_error("PW model mesh has fields this converter does not know");
+            append(out, {get(wide, entry), data - vertices + new_vertices, material - materials + new_materials});
+        }
+    }
+    out.resize(new_vertices);
+    out.insert(out.end(), wide.begin() + vertices, wide.begin() + materials);
+    out.resize(new_materials);
+    out.insert(out.end(), wide.begin() + materials, wide.begin() + materials_end);
     return out;
 }
 
@@ -69,7 +142,7 @@ inline Bytes txp(std::span<const std::uint8_t> pw) {
 // model's texture names to its own pack; PO looks names up in one table, so a
 // later pack gives up a name an earlier one uses (the harness reuses two of
 // the balloon's for different images) and its model's one reference follows.
-inline std::map<std::string, Bytes> models(const std::map<std::uint32_t, Bytes> &pw) {
+inline std::map<std::string, Bytes> models(const std::map<std::uint32_t, Bytes> &pw, bool wide = false) {
     std::map<std::string, Bytes> out;
     std::vector<std::uint32_t> taken;
     const auto has = [](const std::vector<std::uint32_t> &list, std::uint32_t name) {
@@ -77,8 +150,9 @@ inline std::map<std::string, Bytes> models(const std::map<std::uint32_t, Bytes> 
     };
     for (const auto &[name, hash] : {std::pair{"fult_item_balloon", 0xf66bb7u}, std::pair{"fult_item_body", 0x430af6u}}) {
         if (!pw.contains(0x14000000u | hash) || !pw.contains(0x13000000u | hash))
-            throw std::runtime_error(std::string("PW disc lacks ") + name);
-        Bytes pack = txp(pw.at(0x14000000u | hash)), model = pw.at(0x13000000u | hash);
+            throw std::runtime_error(std::string("PW data lacks ") + name);
+        Bytes pack = txp(pw.at(0x14000000u | hash), wide);
+        Bytes model = wide ? mdp(pw.at(0x13000000u | hash)) : pw.at(0x13000000u | hash);
         if (get(model, 0) != 0x2050444du) throw std::runtime_error(std::string(name) + " is not a PSP model");
         const std::uint32_t textures = get(pack, 16), table = get(pack, 20);
         std::vector<std::uint32_t> names;
@@ -181,15 +255,18 @@ constexpr std::uint8_t joint_parents[19] = {255, 0, 1, 2, 3, 2, 5, 6, 7, 2, 9, 1
 // hierarchy. PO indexes joints implicitly, so the clip's two PW byte tables
 // are dropped and its header, offset table and compressed tracks are kept
 // byte for byte. PW's separate effector data is not carried over.
-inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::uint32_t> clips) {
+// Wide: clip table records are {u64 offset, u64 size, ...}, 32 bytes.
+inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::uint32_t> clips, bool wide = false) {
     constexpr std::uint32_t joints = 19, head = 64 + joints * 4;
+    const std::uint64_t record = wide ? 32 : 16;
     const std::uint32_t declared = get(pw, 8, 2), motions = get(pw, 10, 2), body = get(pw, 16), table = get(pw, 28);
     if (get(pw, 0) != 0x7261744du || get(pw, 12) != 0x10000u || declared < joints)
         throw std::runtime_error("Unsupported PW motion archive");
     std::vector<Bytes> blocks;
     for (auto clip : clips) {
         if (clip >= motions) throw std::runtime_error("PW motion archive lacks a clip");
-        const std::uint64_t at = std::uint64_t(body) + get(pw, table + clip * 16ull), size = get(pw, table + clip * 16ull + 4);
+        const std::uint64_t at = std::uint64_t(body) + get(pw, table + clip * record),
+                            size = get(pw, table + clip * record + (wide ? 8 : 4));
         if (size < head + joints * 2 || at + size > pw.size()) throw std::runtime_error("PW clip is outside its archive");
         const auto block = pw.subspan(at, size);
         const std::uint32_t kind = get(block, 4), tracks = get(block, 16), units = get(block, 20);
@@ -220,22 +297,27 @@ inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::u
     for (const auto &block : blocks) out.insert(out.end(), block.begin(), block.end());
     return out;
 }
-// The whole converted bundle from a PW PSP disc image, as file name -> bytes.
-// Models, packs and the lift motion are required; a sound bank or the
-// placement motion the disc does not yield in a usable form is left out.
-// A name can occur in several stage entities, not all of them usable (two of
-// this disc's five snake_coop archives are not): the first that converts wins.
-inline std::map<std::string, Bytes> bundle(portablekit::IsoImage &iso) {
+// The whole converted bundle from a PW source, as file name -> bytes. Models,
+// packs and the lift motion are required; a sound bank or the placement
+// motion the source does not yield in a usable form is left out. A name can
+// occur in several stage entities, not all of them usable (two of the PSP
+// disc's five snake_coop archives are not): the first that converts wins.
+// The Master Collection stores its sounds as Ogg Vorbis, which PO cannot
+// play, so no bank is taken from it yet.
+inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
     const std::uint32_t keys[] = {0x14f66bb7u, 0x14430af6u, 0x13f66bb7u, 0x13430af6u};
-    auto out = models(pw_slot::extract(iso, keys));
+    const bool wide = source.wide;
+    const std::size_t complete = wide ? 6 : 9;
+    auto out = models(pw_slot::extract(source, keys), wide);
     const auto take = [&out](const char *file, auto make) {
         if (out.contains(file)) return;
         try { out[file] = make(); } catch (const std::runtime_error &) {}
     };
-    pw_slot::stage_files(iso, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
+    pw_slot::stage_files(source, [&](std::string_view name, std::span<const std::uint8_t> bytes) {
         // enedam clips 101 and 103: the yank and the hang. snake_coop 156: the attach.
-        if (name == "enedam.mtar") take("fult_enemy.mtar", [&] { return mtar(bytes, {101, 103}); });
-        if (name == "snake_coop.mtar") take("fult_place.mtar", [&] { return mtar(bytes, {156}); });
+        if (name == "enedam.mtar") take("fult_enemy.mtar", [&] { return mtar(bytes, {101, 103}, wide); });
+        if (name == "snake_coop.mtar") take("fult_place.mtar", [&] { return mtar(bytes, {156}, wide); });
+        if (wide) return out.size() == complete;
         if (name == "segrp_75_furuton.sep") take("fulton.sep", [&] { return bank(bytes, 0x31); });
         if (name == "segrp_0_jochu_2other.sep") {
             // Sounds 0x9D3B and 0x9D3C (yank, release) as PO bank 0x32; attach
@@ -243,9 +325,9 @@ inline std::map<std::string, Bytes> bundle(portablekit::IsoImage &iso) {
             take("fulton-lift.sep", [&] { return cues(bytes, 0x32, {104, 105}, 0x11000); });
             take("fulton-foley.sep", [&] { return cues(bytes, 0x144, {32, 74, 37}, 0x9000); });
         }
-        return out.size() == 9;
+        return out.size() == complete;
     });
-    if (!out.contains("fult_enemy.mtar")) throw std::runtime_error("PW disc lacks the soldier lift motion");
+    if (!out.contains("fult_enemy.mtar")) throw std::runtime_error("PW data lacks the soldier lift motion");
     return out;
 }
 } // namespace mgs::fulton_convert

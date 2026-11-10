@@ -43,7 +43,7 @@ inline std::string import(const std::filesystem::path &chosen) {
         if (std::filesystem::is_directory(chosen, error)) fulton_assets::import_bundle(chosen);
         else {
             portablekit::IsoImage iso(chosen);
-            fulton_assets::install_files(fulton_convert::bundle(iso));
+            fulton_assets::install_files(fulton_convert::bundle(pw_slot::psp(iso)));
         }
         return {};
     } catch (const std::exception &error) {

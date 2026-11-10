@@ -1,6 +1,8 @@
 // Texture pack conversion on synthetic data; then, given a local Peace Walker
 // PSP image (ULES-01372 1.01), test-pw-slot PW.iso [OUTPUT] converts the whole
-// Fulton bundle, checks it and optionally writes it to OUTPUT.
+// Fulton bundle, checks it and optionally writes it to OUTPUT. With a local
+// Master Collection installation as well, test-pw-slot PW.iso OUTPUT MC
+// MC_OUTPUT converts that too and checks it against the disc's.
 #include "../profiles/po/host/fulton_convert.hpp"
 #include "../profiles/po/host/pw_slot.hpp"
 #include "psprecomp/sha256.hpp"
@@ -77,7 +79,8 @@ int main(int argc, char **argv) {
     };
     std::vector<std::uint32_t> keys;
     for (const auto &[key, hash] : expected) keys.push_back(key);
-    portablekit::IsoImage iso(argv[1]);
+    portablekit::IsoImage image(argv[1]);
+    const auto iso = mgs::pw_slot::psp(image);
     const auto found = mgs::pw_slot::extract(iso, keys);
     assert(found.size() == 4 && !found.contains(0x13000001u));
     for (const auto &[key, hash] : expected) {
@@ -127,6 +130,59 @@ int main(int argc, char **argv) {
             std::ofstream(std::filesystem::path(argv[2]) / name, std::ios::binary)
                 .write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size()));
         std::cout << "bundle written to " << argv[2] << '\n';
+    }
+    if (argc > 4) {
+        using mgs::fulton_convert::get;
+        const auto wide = mgs::fulton_convert::bundle(mgs::pw_slot::master_collection(argv[3]));
+        assert(wide.size() == 6);
+        for (const char *name : {"fult_item_balloon", "fult_item_body"}) {
+            // Models: the disc's, less the run of zeros its exporter left
+            // between vertices and materials. Put the run back and the
+            // files must be the same byte for byte.
+            const auto &disc = bundle.at(std::string(name) + ".mdp");
+            auto model = wide.at(std::string(name) + ".mdp");
+            const std::uint32_t parts = get(model, 12), table = get(model, 28), materials = get(model, table + 20),
+                                gap = std::uint32_t(disc.size() - model.size());
+            assert(disc.size() > model.size() && gap % 4 == 0);
+            model.insert(model.begin() + materials, gap, 0);
+            for (std::uint32_t part = 0; part < parts; ++part) {
+                const std::uint32_t at = table + part * 80;
+                mgs::fulton_convert::put(model, at + 20, get(model, at + 20) + gap);
+                for (std::uint32_t mesh = 0; mesh < get(model, at + 8); ++mesh) {
+                    const std::uint32_t entry = get(model, at + 12) + mesh * 12 + 8;
+                    mgs::fulton_convert::put(model, entry, get(model, entry) + gap);
+                }
+            }
+            assert(model == disc);
+            // Packs: the same tables, and the same pixels and palettes as far
+            // as the disc's reach; both end in filler that differs.
+            const auto &pack = wide.at(std::string(name) + ".txp"), &disc_pack = bundle.at(std::string(name) + ".txp");
+            // The disc's last bytes are exporter filler, different in each edition.
+            const auto [left, right] = std::mismatch(disc_pack.begin(), disc_pack.end(), pack.begin());
+            const std::size_t used = std::size_t(left - disc_pack.begin());
+            assert(pack.size() >= disc_pack.size() && used + 128 >= disc_pack.size());
+            (void)right;
+            std::cout << name << ": model equal with " << gap << " filler bytes restored, pack equal over " << used << " bytes\n";
+        }
+        for (const char *name : {"fult_enemy.mtar", "fult_place.mtar"}) {
+            // Motions: the same clips at a finer precision. Same joint table,
+            // clip names, kinds and frame counts; more track data.
+            const auto &motion = wide.at(name), &disc = bundle.at(name);
+            const std::uint32_t clips = get(disc, 8), body = get(motion, 12), disc_body = get(disc, 12);
+            assert(get(motion, 8) == clips && body == disc_body && std::equal(disc.begin() + 32, disc.begin() + 184, motion.begin() + 32));
+            for (std::uint32_t clip = 0; clip < clips; ++clip) {
+                const std::uint32_t at = body + get(motion, 184 + clip * 8), disc_at = disc_body + get(disc, 184 + clip * 8);
+                for (std::uint32_t field : {0u, 4u, 8u, 12u, 16u, 24u}) assert(get(motion, at + field) == get(disc, disc_at + field));
+                assert(get(motion, at + 20) > get(disc, disc_at + 20));
+            }
+            std::cout << name << ": " << clips << " clips match the disc's, " << motion.size() << " bytes against "
+                      << disc.size() << '\n';
+        }
+        std::filesystem::create_directories(argv[4]);
+        for (const auto &[name, bytes] : wide)
+            std::ofstream(std::filesystem::path(argv[4]) / name, std::ios::binary)
+                .write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size()));
+        std::cout << "Master Collection bundle written to " << argv[4] << '\n';
     }
     std::cout << "PW extraction, model, motion and balloon sound conversion passed\n";
 }
