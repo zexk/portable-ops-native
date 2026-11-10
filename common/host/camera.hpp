@@ -268,52 +268,50 @@ inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t 
 // player faces well away from the camera and the camera stick is idle, 2
 // whenever the stick is idle. The same routine also runs the recentre on its
 // button. Off runs it with the rule at 0, so the camera stays where the
-// player put it and the button still recentres it.
+// player put it and the button still recentres it. Wrap the actor's update,
+// not its swing helper: generated same-unit calls bypass registered helpers.
 struct CameraFollowState {
-    psprecomp::Runtime::RecompiledFunction swing = nullptr;
+    psprecomp::Runtime::RecompiledFunction update = nullptr;
 };
 inline CameraFollowState camera_follow_state;
 
-inline void camera_swing(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
+inline void camera_update(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     if (portablekit::settings::current().camera_follow) {
-        camera_follow_state.swing(rt, ctx);
+        camera_follow_state.update(rt, ctx);
         return;
     }
     auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
     const std::uint32_t rule = ctx.gpr[4] + 0x68u;
     const std::uint32_t stage_rule = memory.load32(rule);
     memory.store32(rule, 0u);
-    camera_follow_state.swing(rt, ctx);
+    camera_follow_state.update(rt, ctx);
     memory.store32(rule, stage_rule);
 }
 
-inline void install_camera_follow(psprecomp::Runtime &runtime, std::uint32_t swing) {
-    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(swing);
-    if (original == nullptr || original == &camera_swing) return;
-    camera_follow_state.swing = original;
-    runtime.register_function(swing, &camera_swing, "mgs_camera_swing");
-    std::cout << "[camera-follow] the camera's swing behind the player can be turned off at 0x" << std::hex
-              << swing << std::dec << std::endl;
+inline void install_camera_follow(psprecomp::Runtime &runtime, std::uint32_t update) {
+    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(update);
+    if (original == nullptr || original == &camera_update) return;
+    camera_follow_state.update = original;
+    runtime.register_function(update, &camera_update, "mgs_camera_update");
+    std::cout << "[camera-follow] the camera's follow rule is controlled at update 0x" << std::hex
+              << update << std::dec << std::endl;
 }
 
-// The start of the swing in PO+'s stage modules, but for jump targets, address
-// halves and float constants' offsets, which relocation and layout change. The
-// rule's load (lw v1, 0x68(a0)) is compared whole.
-inline constexpr std::uint32_t kCameraSwingShape[] = {
-    0x27bdff90u, 0xafb3004cu, 0x24020001u, 0x3c130000u, 0xafb10044u, 0x00008821u, 0xafb00040u, 0x00808021u,
-    0xe7b50064u, 0xafbf0050u, 0xafb20048u, 0xe7b60068u, 0xe7b40060u, 0x8c830068u, 0x106200b9u, 0xc6750000u,
-    0x24020002u, 0x506200afu, 0xc4810000u, 0x0c000000u};
+// The camera actor's update in PO+ US 1.01 stage modules, with relocated
+// jump targets removed. Other releases are used only if this matches uniquely.
+inline constexpr std::uint32_t kCameraUpdateShape[] = {
+    0x27bdfff0u, 0xafb00000u, 0xafbf0004u, 0x0c000000u, 0x00808021u, 0x10400007u, 0x00000000u,
+    0x0c000000u, 0x02002021u, 0x8fbf0004u, 0x8fb00000u, 0x03e00008u, 0x27bd0010u};
 
 inline void install_camera_follow_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
                                             std::span<const std::uint8_t> code) {
     const auto relocated_out = [](std::uint32_t word) {
         switch (word >> 26u) {
         case 0x02u: case 0x03u: return word & 0xfc000000u;
-        case 0x0fu: case 0x31u: return word & 0xffff0000u;
         default: return word;
         }
     };
-    if (const auto found = find_shape(code, kCameraSwingShape, relocated_out))
+    if (const auto found = find_shape(code, kCameraUpdateShape, relocated_out))
         install_camera_follow(runtime, base + *found);
 }
 

@@ -31,17 +31,17 @@ constexpr SaveFolder kSaveFolders[] = {
 constexpr mgs::CameraAddresses kCamera{0x08804000u + 0xB12F8u, 0x08804000u + 0x2F70BCu, 0x08804000u + 0x2753D8u,
                                        0x08804000u + 0x1F11D0u};
 
-// The camera's swing towards the player's facing.
-constexpr std::uint32_t kCameraSwing = 0x08804000u + 0x10E1DCu;
+// The camera actor's update, reached through the actor dispatcher.
+constexpr std::uint32_t kCameraUpdate = 0x08804000u + 0x10D304u;
 
 // The view builder and the x scale it loads.
 constexpr mgs::WidescreenAddresses kWidescreen{0x08804000u + 0x41124u, 0x08804000u + 0x1E5728u};
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera(runtime, kCamera);
-    mgs::install_camera_follow(runtime, kCameraSwing);
+    mgs::install_camera_follow(runtime, kCameraUpdate);
     mgs::install_model_trace(runtime, 0x08804000u + 0x45EA4u, 0x08804000u + 0x45954u);
-    mgs::install_camera_trace(runtime, 0x08804000u + 0x10D304u);
+    mgs::install_camera_trace(runtime, kCameraUpdate);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u);

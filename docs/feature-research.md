@@ -400,3 +400,22 @@ held about 144 presents/s at normal speed, with no skipped presents in
 the 100% Prediction section. Prediction corrections remain a suspected
 cause of judder, not established by this trace. Physical latency,
 other games and other platforms remain unverified.
+
+## 16. Camera follows behind
+
+PO ULUS-10202 1.02, 2026-11-10. The previous hook at the swing helper
+(`0x10E1DC`, relative to the image) was bypassed by generated same-unit
+calls. The hook now wraps the camera actor's update (`0x10D304`), setting
+the actor's follow rule at `+0x68` to zero while the update runs when
+Controls > Camera follows behind is off. It restores the stage's rule
+afterwards; manual camera input and the recentre button still run through
+the game's camera code.
+
+PO+ discovers the update entry in stage modules instead of the swing
+helper. The shape matched uniquely in all eight local US 1.01 module
+dumps containing the old swing signature; six other US dumps and the
+local EU/JP dumps matched neither signature. Follow toggling, manual
+orbit, recentre and rule restoration pass the stand-in runtime check in
+`scripts/test-camera.cpp`. The user confirmed the fix works in PO on
+Linux with both response settings enabled. PO+ and other platforms remain
+unverified live.
