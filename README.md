@@ -192,9 +192,9 @@ unverified.
 
 ## Optional Fulton prototype (PO only)
 
-Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **L + R +
-Triangle** near an unconscious ordinary soldier to recover them without a
-truck. Release the chord before another attempt. Disabled unless explicitly
+Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **Triangle**
+beside an unconscious ordinary soldier, where the game would let you grab
+them, to recover them without a truck. Disabled unless explicitly
 enabled; PO+ and online play are excluded.
 
 This first mechanic prototype performs immediate recovery using PO's original
@@ -249,7 +249,7 @@ cleared sound2 bank entry is activated again before each play. PW
 attachment and recruitment completed in PO live checks; balloon and both
 effects play, also after a stage reset. Prone soldiers held at gunpoint
 (hold-up flag `0x40`, motion state `0x152`) are eligible, confirmed in game;
-a rejected nearby soldier's flags and behavior are logged on a chord press.
+a rejected nearby soldier's flags and behavior are logged on a Triangle press.
 Optional `fulton-foley.sep` adds the three confirmed attachment foleys at
 donor ticks 60, 175 and 280, plus the confirmed ordinary-soldier yank grunt
 at settle cursor 140. Build it with `fulton_sfx.py --foley` from four mono

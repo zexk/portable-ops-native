@@ -32,7 +32,7 @@ inline void draw() {
     RowOptions options;
     options.disabled = override || (!fulton_assets::available && !fulton_assets::selected);
     options.note = override ? "Developer override" : fulton_assets::status;
-    options.description = "Recover unconscious or prone held-up soldiers with L + R + Triangle. "
+    options.description = "Recover unconscious or prone held-up soldiers with Triangle while beside them. "
                           "Applies after restarting the game. Works only in prepared stages; "
                           "unsupported stages leave the soldier in place. "
                           "Asset import is not available in this build's menu; see the Fulton setup in README.";

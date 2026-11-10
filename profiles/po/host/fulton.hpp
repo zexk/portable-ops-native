@@ -18,8 +18,14 @@
 namespace mgs::fulton {
 constexpr std::uint32_t engine = 0x08804000u;
 constexpr std::uint32_t update = engine + 0xc488cu;
-// The engine remaps L/R to 0x400/0x800; these are not sceCtrl button bits.
-constexpr std::uint32_t chord = 0x1c00u; // L + R + Triangle.
+// Engine pad bit, not the sceCtrl one (the engine remaps L/R to 0x400/0x800).
+constexpr std::uint32_t triangle = 0x1000u;
+// Live ULUS-10202 1.02: player +0xB98 bit 0x10 is the game's own "downed
+// soldier in grab reach" test. It set within about 700 units while facing an
+// unconscious soldier, armed or not, cleared by 830, on turning away and
+// while dragging. Whether it covers a prone hold-up is unverified, so that
+// case is accepted on its own state inside the same reach.
+constexpr std::uint32_t grab_flags = 0xb98u, grab_reach = 0x10u;
 constexpr std::array<std::uint32_t, 16> notify_shape{
     0x27bdffd0, 0xafbf0020, 0x00803021, 0x03a02821,
     0x8c821438, 0x14400004, 0x00402021, 0x8fbf0020,
@@ -71,6 +77,13 @@ bool same(const Memory &memory, Target target) {
     return memory.contains(component, 0x28u) && memory.load32(component + 4u) == target.name;
 }
 template<class Memory>
+bool held_up(const Memory &memory, Target target) {
+    // Live st01t2 trace: prone hold-up uses flag 0x40 and motion state
+    // 0x152 (enemy clip 0xB4), without either unconscious status bit.
+    return (memory.load32(target.work + 0x1858u) & 0x40u) != 0u &&
+           (memory.load32(target.work + 0x3c0u) & 0xffffu) == 0x152u;
+}
+template<class Memory>
 bool eligible(const Memory &memory, Target target) {
     if (!target.name || !memory.contains(target.work, 0x1bb0u) ||
         memory.load32(target.work) != target.name) return false;
@@ -79,13 +92,9 @@ bool eligible(const Memory &memory, Target target) {
         (memory.load32(component) & 0x11000u) != 0x1000u) return false;
     const auto flags = memory.load32(target.work + 0x1858u);
     const auto kind = memory.load32(target.work + 0x1850u);
-    // Live st01t2 trace: prone hold-up uses flag 0x40 and motion state
-    // 0x152 (enemy clip 0xB4), without either unconscious status bit.
-    const bool prone_hold_up = (flags & 0x40u) != 0u &&
-                              (memory.load32(target.work + 0x3c0u) & 0xffffu) == 0x152u;
     // Same status mask as the original enemy query. No carried actors or
     // scripted prisoners; their callback/state contracts need separate work.
-    return (flags & 0x40399u) == 0u && ((flags & 6u) != 0u || prone_hold_up) &&
+    return (flags & 0x40399u) == 0u && ((flags & 6u) != 0u || held_up(memory, target)) &&
            (memory.load32(target.work + 0x185cu) & 0x02000000u) == 0u &&
            kind >= 20u && kind < 54u && memory.load32(target.work + 0x1438u) == 79u;
 }
@@ -93,8 +102,8 @@ bool eligible(const Memory &memory, Target target) {
 template<class Memory>
 Target nearest(const Memory &memory, std::uint32_t player) {
     Target best;
-    // ponytail: fixed 2000-unit prototype reach; expose tuning with item controls.
-    float distance = 2000.0f * 2000.0f;
+    // Just past the 830 units where the game's grab test was seen to clear.
+    float distance = 900.0f * 900.0f;
     unsigned remaining = 4096;
     for (unsigned bucket = 0; bucket < 16 && remaining; ++bucket) {
         auto node = memory.load32(engine + 0x258f8cu + 12u * bucket);
@@ -115,7 +124,7 @@ Target nearest(const Memory &memory, std::uint32_t player) {
                         if (eligible(memory, target)) { best = target; distance = squared; }
                         else if (memory.load32(target.work + 0x1850u) >= 20u &&
                                  memory.load32(target.work + 0x1850u) < 54u) {
-                            // A chord press is the only caller during play. Keep
+                            // A Triangle press is the only caller during play. Keep
                             // rejected nearby actors identifiable for live RE.
                             std::cout << std::hex << "[fulton] nearby rejected soldier " << target.name
                                       << " work " << target.work << " flags " << memory.load32(target.work + 0x1858u)
@@ -132,6 +141,15 @@ Target nearest(const Memory &memory, std::uint32_t player) {
         }
     }
     return best;
+}
+
+// The soldier a Triangle press recovers: the one the game would let the
+// player grab, or a prone held-up one in the same reach.
+template<class Memory>
+Target select(const Memory &memory, std::uint32_t player) {
+    const auto target = nearest(memory, player);
+    if (!target.work) return {};
+    return (memory.load32(player + grab_flags) & grab_reach) != 0u || held_up(memory, target) ? target : Target{};
 }
 
 template<class Memory>
@@ -233,7 +251,7 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
                   << std::dec << std::endl;
     }
     const auto pad = memory.load32(player + 0x720u);
-    const bool down = memory.contains(pad, 4u) && (memory.load32(pad) & chord) == chord;
+    const bool down = memory.contains(pad, 4u) && (memory.load32(pad) & triangle) != 0u;
     const bool pressed = down && !held;
     held = down;
     const auto system = memory.load32(engine + 0x1f11d0u);
@@ -247,8 +265,8 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
         resume(ctx);
         return;
     }
-    const auto target = nearest(memory, player);
-    if (!target.work) { std::cout << "[fulton] no eligible soldier within reach" << std::endl; resume(ctx); return; }
+    const auto target = select(memory, player);
+    if (!target.work) { resume(ctx); return; }
     if (fulton_assets::enabled()) {
         busy = true;
         fulton_visuals::begin(runtime, ctx, player, target.work, resume,
@@ -275,6 +293,6 @@ inline void install(psprecomp::Runtime &runtime) {
     fulton_visuals::install(runtime);
     fulton_sound::install(runtime);
     runtime.register_function(update, &player_update, "po_fulton_player_update");
-    std::cout << "[fulton] prototype enabled; L + R + Triangle near unconscious soldier" << std::endl;
+    std::cout << "[fulton] prototype enabled; Triangle beside a downed soldier" << std::endl;
 }
 } // namespace mgs::fulton

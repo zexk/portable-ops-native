@@ -50,8 +50,6 @@ unsigned resets = 0;
 
 int main(int argc, char **argv) {
     using namespace mgs::fulton;
-    assert((0x1c00u & chord) == chord); // Observed engine L + R + Triangle.
-    assert((0x1300u & chord) != chord); // Raw sceCtrl mask is not the engine mask.
     Memory memory;
     {
         std::vector<std::uint8_t> bank(0x200);
@@ -212,8 +210,14 @@ int main(int argc, char **argv) {
     constexpr std::uint32_t node = 0x09b30000u;
     memory.words[engine + 0x258f8c] = node;
     memory.words[node + 0x10] = component;
-    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(1000.0f);
+    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(800.0f);
     assert(nearest(memory, player).work == work);
+    assert(select(memory, player).work == 0); // The game does not offer a grab.
+    memory.words[player + grab_flags] = grab_reach;
+    assert(select(memory, player).work == work);
+    memory.words[player + grab_flags] = 0;
+    memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(1000.0f);
+    assert(nearest(memory, player).work == 0); // Past grab reach.
     memory.words[work + 0x30] = std::bit_cast<std::uint32_t>(3000.0f);
     assert(nearest(memory, player).work == 0);
     memory.words[work + 0x30] = 0x7fc00000; // NaN must never win selection.
