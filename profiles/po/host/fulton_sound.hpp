@@ -354,6 +354,8 @@ inline void install(psprecomp::Runtime &) {
     bank = load("fulton.sep", 0x31u, 0x8000u);
     lift_bank = load("fulton-lift.sep", 0x32u, 0x11000u);
     foley_bank = load("fulton-foley.sep", fulton_audio_catalog::kBank, fulton_audio_catalog::kCapacity);
+    if (!foley_bank.empty() && cue_count(foley_bank) < fulton_audio_catalog::kSounds)
+        std::cout << "[fulton] imported assets predate the yank grunt; import them again" << std::endl;
     if (!foley_bank.empty() && !sequenced(foley_bank) && !valid_foley(foley_bank)) {
         std::cerr << "[fulton] fulton-foley.sep has invalid cue/sample tables" << std::endl;
         foley_bank.clear();

@@ -197,7 +197,8 @@ c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_
 out/test-fulton-assets
 c++ -std=c++20 -O2 -Iportablekit/include -Iportablekit/host -Iportablekit/third_party \
     scripts/test-pw-slot.cpp portablekit/src/sha256.cpp \
-    portablekit/host/kernel/iso_image.cpp -o out/test-pw-slot
+    portablekit/host/kernel/iso_image.cpp portablekit/host/audio/atrac_decoder.cpp \
+    -o out/test-pw-slot  # add -DPORTABLEKIT_HAS_FFMPEG and libavcodec to decode the balloon
 out/test-pw-slot                  # conversions on synthetic data
 out/test-pw-slot PW.iso [OUTPUT]  # whole bundle from a local ULES-01372 image
 out/test-pw-slot PW.iso PSP_OUTPUT MC_FOLDER MC_OUTPUT # compare both editions

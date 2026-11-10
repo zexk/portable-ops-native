@@ -6,8 +6,10 @@
 // headers are otherwise the PSP ones.
 #include "pw_slot.hpp"
 #include "fulton_audio_convert.hpp"
+#include "audio/atrac_decoder.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -193,6 +195,42 @@ inline Bytes bank(std::span<const std::uint8_t> pw, std::uint16_t id) {
     return out;
 }
 
+// PO plays one ATRAC3plus effect at a time (sound2 type 5), and its soldiers
+// speak in ATRAC3plus: a line of speech took the balloon's voice and cut it
+// off. So the PSP balloon is decoded and stored as the 12 kHz ADPCM cue the
+// MC import makes. Without FFmpeg (standalone checks) it stays ATRAC3plus.
+inline Bytes balloon(std::span<const std::uint8_t> pw) {
+    auto copy = bank(pw, 0x31);
+    portablekit::audio::AtracDecoder decoder;
+    if (!portablekit::audio::AtracDecoder::available()) return copy;
+    const std::size_t riff = 0x54, end = get(pw, 4) - 4;
+    if (get(pw, riff) != 0x46464952u) throw std::runtime_error("PW balloon sound is not ATRAC3plus");
+    std::uint32_t channels = 0, rate = 0, block = 0, samples = 0, skip = 368, data = 0, size = 0;
+    for (std::size_t at = riff + 12; at + 8 <= end;) {
+        const auto id = get(pw, at), length = get(pw, at + 4);
+        if (length > end - at - 8) throw std::runtime_error("PW balloon sound is truncated");
+        if (id == 0x20746d66u && length >= 14) {
+            channels = get(pw, at + 10, 2); rate = get(pw, at + 12); block = get(pw, at + 20, 2);
+        } else if (id == 0x74636166u && length >= 8) {
+            samples = get(pw, at + 8); skip += get(pw, at + 12);
+        } else if (id == 0x61746164u) { data = std::uint32_t(at + 8); size = length; }
+        at += 8 + length + (length & 1);
+    }
+    if (channels != 1 || !block || !data || !samples || samples > rate * 15u ||
+        !decoder.open(portablekit::audio::AtracCodec::Atrac3Plus, 1, block, {}))
+        throw std::runtime_error("Unsupported PW balloon sound");
+    fulton_audio_convert::Clip clip{{}, rate};
+    std::array<std::int16_t, 2048 * 2> frame;
+    for (std::uint32_t at = 0; at + block <= size; at += block) {
+        const auto count = decoder.decode(pw.subspan(data + at, block), frame.data());
+        for (std::size_t i = 0; i < count; ++i) clip.samples.push_back(frame[i * 2]);
+    }
+    if (clip.samples.size() < skip + samples) throw std::runtime_error("Cannot decode PW balloon sound");
+    clip.samples.erase(clip.samples.begin(), clip.samples.begin() + skip);
+    clip.samples.resize(samples);
+    return fulton_audio_convert::bank({clip}, 0x31, 12000, 0x8000);
+}
+
 // Chosen cues of a PW sequenced effects bank as a small bank of their own.
 // Such a bank (PW's resident segrp_0_jochu_2other, PO's own
 // segrp_70_stage_glass) has cue records from +0x08, a 128-entry key map of
@@ -371,7 +409,7 @@ inline std::map<std::string, Bytes> bundle(const pw_slot::Source &source) {
             }
             return out.size() == 8 && foley.size() == 3;
         }
-        if (name == "segrp_75_furuton.sep") take("fulton.sep", [&] { return bank(bytes, 0x31); });
+        if (name == "segrp_75_furuton.sep") take("fulton.sep", [&] { return balloon(bytes); });
         if (name == "segrp_0_jochu_2other.sep") {
             // Sounds 0x9D3B and 0x9D3C (yank, release) as PO bank 0x32; attach
             // effects 0x9CF3, 0x9D1D and 0x9CF8 as the port's private bank.

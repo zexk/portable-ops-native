@@ -34,7 +34,9 @@ converts a PW PSP disc image or Master Collection installation in the port
 itself (`pw_slot.hpp`, `fulton_convert.hpp`, `fulton_audio_convert.hpp`;
 `scripts/test-pw-slot.cpp` checks local sources). MC import includes the
 confirmed soldier grunt and encodes Ogg effects as PSP ADPCM. PSP import
-copies its confirmed grunt and voice unchanged alongside sequenced foleys.
+copies its confirmed grunt and voice unchanged alongside sequenced foleys,
+and decodes its ATRAC3plus balloon to the same 12 kHz ADPCM cue (PO plays
+one ATRAC3plus effect at a time, so other speech cut the balloon off).
 MC's balloon uses 12 kHz to fit PO's existing 32 KiB bank. Donors load from memory in
 every stage; no stage file is replaced. Both imports pass offline checks;
 the complete MC bundle and its Game-tab import still need live validation.

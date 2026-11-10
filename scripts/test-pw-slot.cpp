@@ -147,6 +147,15 @@ int main(int argc, char **argv) {
              std::pair{"fulton.sep", "f15c1f262d09969bbe486306f13c0d73e942d9940f875daaa11181ba939974a1"}}) {
         const auto digest = psprecomp::sha256_bytes(bundle.at(name));
         std::cout << name << ' ' << digest << '\n';
+        // With FFmpeg the balloon becomes 12 kHz ADPCM, as the MC import's is.
+        if (name == std::string_view("fulton.sep") && portablekit::audio::AtracDecoder::available()) {
+            const auto &sound = bundle.at(name);
+            const auto sample = mgs::fulton_convert::get(sound, 16);
+            assert(sound.size() <= 0x8000 && mgs::fulton_convert::get(sound, 0x34) == 0x01010000u);
+            assert(mgs::fulton_convert::get(sound, sample + 4) == (12000u << 16 | 0x1000u));
+            assert(std::abs(int(mgs::fulton_convert::get(sound, 0x30 + 24)) - 4357) <= 3); // 192,144 samples
+            continue;
+        }
         assert(digest == hash);
     }
     // The sequenced banks have no earlier reference; check their own tables.
