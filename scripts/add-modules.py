@@ -18,6 +18,8 @@ import pathlib
 import re
 import subprocess
 import sys
+import shutil
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Modules left to the interpreter.
@@ -47,10 +49,9 @@ def main():
         assert fnv1a64(data) == digest, '%s: hash does not match its name' % dump.name
         prefix = re.sub(r'\W', '_', dump.stem)
         target = overlays / prefix
-        if (target / 'meta.txt').exists():
+        if (target / 'meta.txt').exists() and 'coverage=full' in (target / 'meta.txt').read_text().splitlines():
             continue
-        target.mkdir(parents=True, exist_ok=True)
-        elf = target / 'module.elf'
+        overlays.mkdir(parents=True, exist_ok=True)
         # Import stubs inside the code (<id>.stubs, offsets START-END a line)
         # stay out of the corpus: calls to them must reach the HLE.
         stubs = dump.with_suffix('.stubs')
@@ -62,14 +63,21 @@ def main():
         entry = dump.with_suffix('.entry')
         if entry.exists():
             exclude += ['--entry', entry.read_text().strip()]
-        subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)] + exclude, check=True)
-        # --compact: only the code the analysis reaches, entries only where
-        # control arrives; the rest runs in the interpreter.
-        subprocess.run([str(recomp), str(elf), '--auto', str(target), '0x%08X' % base, '--prefix', prefix, '--compact'],
-                       check=True, stdout=subprocess.DEVNULL)
-        elf.unlink()
-        (target / 'meta.txt').write_text('base=0x%08X\nname=%s\nsize=%d\ncode_size=%d\nhash=0x%016X\nsource=%s\n'
-                                         % (base, name, len(data), len(data), digest, dump.name))
+        # Full emission covers computed jumps and scheduler continuations that
+        # static analysis cannot find. Keep import stubs excluded for the HLE.
+        # Generate separately so a failed conversion leaves the old corpus intact.
+        with tempfile.TemporaryDirectory(dir=overlays) as temporary:
+            staged = pathlib.Path(temporary)
+            elf = staged / 'module.elf'
+            subprocess.run([sys.executable, str(wrap), str(dump), '0x%08X' % base, str(elf)] + exclude, check=True)
+            subprocess.run([str(recomp), str(elf), '--auto', str(staged), '0x%08X' % base, '--prefix', prefix],
+                           check=True, stdout=subprocess.DEVNULL)
+            elf.unlink()
+            (staged / 'meta.txt').write_text('base=0x%08X\nname=%s\nsize=%d\ncode_size=%d\nhash=0x%016X\nsource=%s\ncoverage=full\n'
+                                             % (base, name, len(data), len(data), digest, dump.name))
+            if target.exists():
+                shutil.rmtree(target)
+            staged.rename(target)
         print('%s: %d bytes at 0x%08X' % (prefix, len(data), base))
     pool_units(overlays)
 

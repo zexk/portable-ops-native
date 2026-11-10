@@ -7,6 +7,7 @@ import importlib.util
 import pathlib
 import struct
 import tempfile
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -64,4 +65,43 @@ with tempfile.TemporaryDirectory() as directory:
     modules.pool_units(root / 'overlays')
     assert (module / 'meta.txt').exists()
     assert len((module / 'units.txt').read_text().split()) == 1
+    # Existing compact corpora must be regenerated in full, keeping startup
+    # entry and import exclusions. Failure must leave the old corpus intact.
+    dumps = root / 'dumps'
+    dumps.mkdir()
+    dump = dumps / ('mod%08X_mgp_stage_%016X.bin' % (base, stages.fnv1a64(startup)))
+    dump.write_bytes(startup)
+    dump.with_suffix('.entry').write_text(hex(base + 8))
+    dump.with_suffix('.stubs').write_text('c-10\n')
+    target = root / 'profiles/po/overlays' / dump.stem
+    target.mkdir(parents=True)
+    (target / 'meta.txt').write_text('name=old\n')
+    with patch.object(modules, 'ROOT', root), patch.object(modules.sys, 'argv', ['add-modules.py', 'po', str(dumps)]):
+        with patch.object(modules.subprocess, 'run', side_effect=RuntimeError('generation failed')):
+            try:
+                modules.main()
+                assert False, 'Failed generation was accepted'
+            except RuntimeError:
+                pass
+        assert (target / 'meta.txt').read_text() == 'name=old\n'
+
+        def generate(command, **kwargs):
+            if '--auto' not in command:
+                assert command[-4:] == ['--exclude', '0xC-0x10', '--entry', hex(base + 8)]
+                pathlib.Path(command[4]).write_bytes(b'ELF')
+                return
+            assert '--compact' not in command
+            staged = pathlib.Path(command[command.index('--auto') + 1])
+            prefix = command[command.index('--prefix') + 1]
+            (staged / 'generated_unit_0000.cpp').write_text('void full_coverage() {}\n')
+            (staged / (prefix + '_units.hpp')).write_text('')
+            (staged / (prefix + '_registry.cpp')).write_text('register_%s_unit_0(runtime);\n' % prefix)
+
+        with patch.object(modules.subprocess, 'run', side_effect=generate) as run:
+            modules.main()
+            assert run.call_count == 2
+            assert 'coverage=full' in (target / 'meta.txt').read_text().splitlines()
+            assert len((target / 'units.txt').read_text().split()) == 1
+            modules.main()
+            assert run.call_count == 2, 'Full corpus regenerated unnecessarily'
 print('stage startup image checks passed')

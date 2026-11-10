@@ -98,6 +98,12 @@ Portable Ops+ is the same with `pop`, `PortableOpsPlusNative` and
 
 ## Game modules and stages
 
+During development, build named targets such as
+`cmake --build out/po --target PortableOpsNative -j2`, plus the specific
+`overlay_modBASE_NAME_HASH` targets needed for the test path. Host-only
+changes do not require rebuilding module libraries. Reserve whole-corpus
+builds and exhaustive coverage sweeps for release candidates.
+
 The games load their own modules (sound, file system, zlib) and one stage
 module at a time from the disc. Each needs recompiled code for every image it runs. Unknown images fall
 back to the interpreter.
@@ -123,11 +129,30 @@ nix develop --command python3 scripts/add-modules.py po out/module-dumps
 A module is identified by its code in memory at first entry and again after
 an instruction-cache flush. `stage-images.py` writes both the PRX-relocated
 startup image and the image after engine linking, with a `.entry` sidecar
-for `module_start`. `add-modules.py` compiles both. The runtime matches the
+for `module_start`. `add-modules.py` compiles both with an entry for every
+instruction word, including computed jump targets and scheduler
+continuations missed by static analysis. Import stubs remain excluded so
+calls reach the HLE. Rerunning it with the original dumps upgrades older
+compact corpora; full corpora are marked `coverage=full` in their generated
+metadata and skipped. The runtime matches the
 startup corpus before `module_start`, then drops it when the game flushes
 its instruction cache after linking and matches the linked corpus on its
-next call. Regenerate stage images to add startup corpora to an existing
-build.
+next call. Cache invalidation keeps post-start corpora whose bytes did not
+change; a range flush checks only overlapping modules. Regenerate stage
+images to add startup corpora to an existing build. Validate a user-controlled
+run with `PSPRECOMP_NO_INTERPRETER=1` to stop at any remaining coverage gap.
+
+Check a built module against its dump without running the game:
+
+```sh
+nix develop --command c++ -std=c++20 -Iportablekit/include \
+    scripts/check-module-coverage.cpp -ldl -o out/check-module-coverage
+out/check-module-coverage out/po/bin/overlays/modBASE_NAME_HASH.so \
+    out/module-dumps/modBASE_NAME_HASH.bin
+```
+
+The check requires every aligned instruction address to be registered and
+every import range from the dump's `.stubs` sidecar to remain excluded.
 
 Stages of one map (`trneko0800`, `0801`, `0802`) differ in a few units only, so `add-modules.py` moves each
 unit to `profiles/<edition>/units/`, named by its code, and the build compiles

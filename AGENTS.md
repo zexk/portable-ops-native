@@ -1,5 +1,12 @@
 # AGENTS.md
 
+## Development builds
+
+- Build named executable, module and test targets during development.
+- Regenerate and audit only the corpora needed for the current test path.
+- Reserve whole-corpus builds and exhaustive sweeps for release candidates,
+  unless the user explicitly requests one. Keep completed build artifacts.
+
 ## Peace Walker backports
 
 These rules apply to Fulton and every future Peace Walker feature backported
