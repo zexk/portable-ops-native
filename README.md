@@ -143,39 +143,29 @@ Direct PSP ISO and MC import are pending. The workflow below is for development.
 
 ### Converted Fulton bundle
 
-After preparing stages with `scripts/prepare-fulton-assets.py`, validate and
-install its output into a port user-data directory:
-
-```sh
-python3 scripts/fulton-assets.py check OUTPUT
-python3 scripts/fulton-assets.py install OUTPUT --data-dir PORT_DATA
-```
-
-`PORT_DATA` is the directory containing `settings.ini` and `ms0`, not
-`PSP/SAVEDATA`. Assets go in `PORT_DATA/pw/fulton`; the installer leaves
-settings and saves untouched and refuses to replace an existing bundle.
-It checks stage sizes and hashes, archive decompression, required converted
-model/texture/motion headers and any optional sound/placement headers.
-Only verified bundle files are copied; donor paths are not stored. This
-initial snapshot installer accepts at most 512 MiB per bundle.
+The bundle is a folder of PW donors already in PO's formats: the balloon and
+harness models and texture packs (`fult_item_balloon`, `fult_item_body`,
+`.mdp` and `.txp`), the lift motion `fult_enemy.mtar`, and optionally
+`fult_place.mtar`, `fulton.sep`, `fulton-lift.sep` and `fulton-foley.sep`.
+It lives in `pw/fulton` under the port's user data. No stage file is changed
+or replaced: the port hands the donors to PO's own resource dispatcher from
+memory, once per stage, so recovery works in every stage.
 
 **Game > Peace Walker > Fulton recovery (experimental)** is off by default.
 Importing assets does not enable it. The selection persists as `pw.fulton`
-in `settings.ini`; changes require a restart. Startup checks every indexed
-stage's size and SHA-256. Missing or damaged stages leave Fulton inactive
+in `settings.ini`; changes require a restart. Startup checks each file's
+presence, size and header. Missing or damaged files leave Fulton inactive
 without blocking PO; the saved selection is kept. Restore game defaults
-turns the selection off. Only prepared stages support recovery; other stages
-cancel the attempt and retain the soldier.
+turns the selection off.
 
 While assets are missing or invalid, **Import Fulton assets…** in the same
-section opens the folder browser. Choosing a converted bundle folder (the one
-holding `index.txt`) checks its stages, copies the index, those stages and
-the known optional sound and placement files into `pw/fulton`, and checks the
-copy before it replaces anything. It does not change the selection, and the
-source folder is not needed afterwards. It takes converted bundles only, not
-a raw PW ISO or MC installation.
+section opens the folder browser. Choosing a bundle folder (the one holding
+`fult_enemy.mtar`) checks and copies those named files into `pw/fulton`, and
+checks the copy before it replaces anything. It does not change the
+selection, and the source folder is not needed afterwards. It takes
+converted bundles only, not a raw PW ISO or MC installation.
 
-`MGSPO_FULTON_STAGE_DIR` can still override the bundle directory for developer
+`MGSPO_FULTON_STAGE_DIR` can override the bundle directory for developer
 tests. `MGSPO_FULTON` overrides the saved selection: `0` disables it, `1`
 with `MGSPO_FULTON_VISUALS=1` requests the asset-based experiment, and `1`
 without visuals retains the old instant-recovery developer test. The Game
@@ -184,7 +174,7 @@ toggle is locked while this override is present.
 Checks without a game or renderer:
 
 ```sh
-python3 scripts/fulton-assets.py --self-test
+python3 scripts/prepare-fulton-assets.py --self-test
 c++ -std=c++20 -Iportablekit/include -Iportablekit/host \
     scripts/test-fulton-assets.cpp portablekit/src/sha256.cpp \
     portablekit/host/install/user_data.cpp portablekit/host/profile.cpp \
@@ -229,7 +219,7 @@ out/test-fulton
 
 ### Developer visual experiment
 
-`MGSPO_FULTON_VISUALS=1` adds PW PSP donors to prepared stages. Snake
+`MGSPO_FULTON_VISUALS=1` requests the asset-based sequence. Snake
 attaches the device with the optional converted PW `snake_coop` clip 156
 (`fult_place.mtar`), falling back to PO's crouch-and-place clip (`0x25` of
 `sna_wp_claymore`) when absent. The harness (`fult_item_body`) and balloon ride the
@@ -284,21 +274,14 @@ Provide a local asset directory with `fult_item_balloon.mdp/.txp` and
 `segrp_75_furuton.sep`, `fult_place.mtar`, `fulton-lift.sep` and
 `fulton-foley.sep`. The optional
 placement archive comes from metal-gear's `mtar.py`, `--clip 156` of PW's
-`snake_coop.mtar`; it loads through PO's resource handler once per stage,
-without increasing the fixed-size stage ZAR. The script converts the TXPs to PO's layout, renames
-textures the two packs share, puts the packs before the models, and
-renumbers the sound bank. Prepare selected stages from an extracted PO disc:
+`snake_coop.mtar`. The script converts the TXPs to PO's layout, renames
+textures the two packs share and renumbers the sound bank, writing a bundle
+folder for the Game tab's import:
 
 ```sh
-python3 scripts/prepare-fulton-assets.py STAGE_DIRECTORY ASSET_DIRECTORY OUTPUT \
-    --stage st01 --stage st01t1 --stage st01t2
-MGSPO_FULTON=1 MGSPO_FULTON_VISUALS=1 MGSPO_FULTON_STAGE_DIR=OUTPUT \
-    out/po/bin/PortableOpsNative
+python3 scripts/prepare-fulton-assets.py ASSET_DIRECTORY OUTPUT
 ```
 
-The stage filter verifies both original and replacement hashes. It supplies
-prepared bytes only in memory; the disc image stays untouched. Stages without
-prepared donor data cannot run this visual experiment.
 `MGSPO_FULTON_TRACE_MOTION=1` logs every motion request and the player's
 motion channels (two 0x80-byte layers). Position Snake facing
 the unconscious soldier for the attachment test.

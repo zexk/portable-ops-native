@@ -588,11 +588,9 @@ inline void install(Runtime &runtime) {
             placement_bytes.clear();
         }
     }
-    for (auto &donor : donors) {
-        std::ifstream file(fulton_assets::directory() / donor.name, std::ios::binary);
-        donor.bytes.assign(std::istreambuf_iterator<char>(file), {});
-        if (donor.bytes.size() < 32 || donor.bytes.size() > 0x10000u) donor.bytes.clear();
-    }
+    for (auto &donor : donors)
+        for (const auto &file : fulton_assets::files)
+            if (std::strcmp(file.name, donor.name) == 0) donor.bytes = fulton_assets::read(fulton_assets::directory(), file);
     if (const char *y = portablekit::hle_extension::env("FULTON_BALLOON_Y")) balloon_y = std::strtof(y, nullptr);
     if (const char *y = portablekit::hle_extension::env("FULTON_HARNESS_Y")) harness_y = std::strtof(y, nullptr);
     original_motion = runtime.registered_function(base + 0x7f264u);

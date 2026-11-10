@@ -1,4 +1,4 @@
-// No game or renderer: stage integrity, default-off selection and persistence.
+// No game or renderer: bundle checks, import, default-off selection and persistence.
 #include "profile.hpp"
 #include "../profiles/po/host/fulton_settings.hpp"
 
@@ -31,18 +31,32 @@ int main(int argc, char **argv) {
     assert(!assets::selected && !assets::available && !assets::enabled());
     const auto bundle = root / "pw/fulton";
     assert(assets::directory() == bundle);
-    fs::create_directories(bundle);
-    const std::vector<std::uint8_t> bytes(64, 0x42);
-    std::ofstream stage(bundle / "st01.zar", std::ios::binary);
-    stage.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-    stage.close();
-    const auto row = std::string(64, 'a') + " 64 " + std::string(128, 'b') + " " +
-                     psprecomp::sha256_bytes(bytes) + " st01.zar\n";
-    const auto index = [&](const std::string &text) { std::ofstream(bundle / "index.txt") << text; };
-    index(row);
-    assets::load();
-    assert(assets::available && !assets::enabled() && !assets::selected);
+
+    // A donor folder: every required file with the header its name promises.
+    const auto donor = root / "donor";
+    fs::create_directory(donor);
+    const auto write = [](const fs::path &path, std::array<std::uint32_t, 3> header, std::size_t size = 64) {
+        std::vector<char> bytes(size, 0x42);
+        std::memcpy(bytes.data(), header.data(), sizeof(header));
+        std::ofstream(path, std::ios::binary).write(bytes.data(), std::streamsize(bytes.size()));
+    };
+    for (const auto &file : assets::files)
+        if (file.required) write(donor / file.name, file.header);
+    write(donor / "fulton.sep", {});
+    std::ofstream(donor / "notes.txt") << "stray";
+    assets::check(donor);
+
+    // Import: a checked copy of the named files only, nothing enabled by it.
+    assets::import_bundle(donor);
+    assert(fs::exists(bundle / "fulton.sep") && !fs::exists(bundle / "notes.txt"));
     assert(!fs::exists(root / "settings.ini"));
+    fs::rename(donor, root / "moved"); // The source is not needed afterwards.
+    assets::load();
+    assert(assets::available && !assets::selected && !assets::enabled());
+    try { assets::import_bundle(root / "missing"); assert(false); } catch (const std::exception &) {}
+    assets::load();
+    assert(assets::available); // A failed import leaves the installed copy.
+
     settings::write_settings_file(root, {{"disc_image", "keep.iso"}, {"camera.follow", "1"}});
     mgs::fulton_settings::save(true);
     assert(!assets::enabled()); // Selection does not change live hooks.
@@ -60,38 +74,30 @@ int main(int argc, char **argv) {
     auto entries = settings::read_settings_file(root);
     assert(entries.at("disc_image") == "keep.iso" && entries.at("camera.follow") == "1");
     assert(entries.at("pw.fulton") == "1");
-    for (const auto &bad : {row + row, row + "bad\n", std::string("invalid\n"),
-                           row.substr(0, row.find("st01.zar")) + "../st01.zar\n"}) {
-        index(bad);
+
+    // Damaged or missing assets leave it inactive and keep the selection.
+    const auto lift = bundle / "fult_enemy.mtar";
+    for (const auto &header : {std::array<std::uint32_t, 3>{0x7261744du, 19u, 1u}, std::array<std::uint32_t, 3>{}}) {
+        write(lift, header);
         assets::load();
         assert(assets::selected && !assets::available && !assets::enabled());
     }
-    index(row);
-    // Import: a verified copy, extras by name only, nothing enabled by it.
-    const auto donor = root / "donor";
-    fs::rename(bundle, donor);
-    std::ofstream(donor / "fulton.sep") << "bank";
-    std::ofstream(donor / "notes.txt") << "stray";
-    mgs::fulton_settings::reset();
-    assert(assets::import_bundle(donor) == 1);
-    assert(fs::exists(bundle / "fulton.sep") && !fs::exists(bundle / "notes.txt"));
-    assert(!assets::selection(settings::read_settings_file(root)));
-    fs::remove_all(donor); // The source is not needed afterwards.
+    write(lift, {0x7261744du, 19u, 2u}, 0x10001); // Over the size limit.
     assets::load();
-    assert(assets::available && !assets::selected && !assets::enabled());
-    try { assets::import_bundle(root / "missing"); assert(false); } catch (const std::exception &) {}
+    assert(!assets::available);
+    write(lift, {0x7261744du, 19u, 2u});
     assets::load();
-    assert(assets::available); // A failed import leaves the installed copy.
-    mgs::fulton_settings::save(true);
-    std::ofstream(bundle / "st01.zar", std::ios::app) << "changed";
+    assert(assets::enabled());
+    write(bundle / "fult_place.mtar", {}); // A bad optional file is not skipped.
     assets::load();
-    assert(assets::selected && !assets::enabled());
-    fs::remove(bundle / "st01.zar");
+    assert(!assets::available);
+    fs::remove(bundle / "fult_place.mtar");
+    fs::remove(lift);
     assets::load();
     assert(assets::selected && !assets::enabled());
     mgs::fulton_settings::reset();
     assert(!assets::selection(settings::read_settings_file(root)));
     assert(!assets::selection({{"pw.fulton", "true"}}));
-    if (argc > 1) assert(!assets::checked_stages(argv[1]).empty());
-    std::cout << "Fulton stage integrity, missing assets, default-off selection and persistence passed\n";
+    if (argc > 1) assets::check(argv[1]);
+    std::cout << "Fulton bundle checks, import, default-off selection and persistence passed\n";
 }

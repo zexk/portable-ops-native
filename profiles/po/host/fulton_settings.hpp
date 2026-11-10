@@ -38,10 +38,10 @@ inline bool screen([[maybe_unused]] bool back) {
     const auto result = browser->frame(back);
     if (result == FileBrowser::Result::Chosen) {
         try {
-            const auto count = fulton_assets::import_bundle(browser->chosen());
+            fulton_assets::import_bundle(browser->chosen());
             // The running game keeps its startup snapshot; only the menu learns.
             fulton_assets::available = true;
-            fulton_assets::status = std::to_string(count) + " prepared stages imported";
+            fulton_assets::status = "Assets imported";
         } catch (const std::exception &error) {
             fulton_assets::status = "Import failed: not a converted Fulton folder";
             std::cerr << "[fulton] import failed: " << error.what() << std::endl;
@@ -63,13 +63,12 @@ inline void draw() {
     options.disabled = override || (!fulton_assets::available && !fulton_assets::selected);
     options.note = override ? "Developer override" : fulton_assets::status;
     options.description = "Recover unconscious or prone held-up soldiers with Triangle while beside them. "
-                          "Applies after restarting the game. Works only in prepared stages; "
-                          "unsupported stages leave the soldier in place.";
+                          "Applies after restarting the game.";
     if (toggle_row("Fulton recovery (experimental)", fulton_assets::selected, options))
         save(!fulton_assets::selected);
     if (!override && !fulton_assets::available &&
         button_row("Import Fulton assets…",
-                   {false, {}, "Choose a folder of converted Fulton assets, the one that holds index.txt. "
+                   {false, {}, "Choose a folder of converted Fulton assets, the one that holds fult_enemy.mtar. "
                                "They are checked and copied into the game's own data; the folder is not "
                                "needed afterwards. Importing does not turn Fulton on."})) {
         FileBrowser::Options browse;
@@ -79,7 +78,7 @@ inline void draw() {
         browse.choose_folder = "Import from this folder";
         browse.choose_on_open = [](const std::filesystem::path &folder) {
             std::error_code error;
-            return std::filesystem::is_regular_file(folder / "index.txt", error);
+            return std::filesystem::is_regular_file(folder / "fult_enemy.mtar", error);
         };
         browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
     }

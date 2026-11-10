@@ -3,19 +3,20 @@
 #include "hle/hle_common.hpp"
 #include "install/user_data.hpp"
 #include "portablekit/hle_extension.hpp"
-#include "psprecomp/sha256.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <map>
-#include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
+// The converted Fulton bundle: PW donors already in PO's formats, as plain
+// files in the port's user data. Nothing here reads a PW source, and the
+// game's own disc files are never replaced; fulton_visuals hands the donors
+// to PO's resource dispatcher from memory in whatever stage is loaded.
 namespace mgs::fulton_assets {
 inline std::filesystem::path directory() {
     if (const char *override = portablekit::hle_extension::env("FULTON_STAGE_DIR"); override && *override)
@@ -32,67 +33,57 @@ inline bool selection(const portablekit::install::SettingsEntries &entries) {
     return found != entries.end() && found->second == "1";
 }
 
-struct Stage {
-    std::string original_hash, prefix, replacement_hash;
-    std::size_t size;
-    std::filesystem::path replacement;
+struct File {
+    const char *name;
+    std::uint32_t limit;                    // largest size taken
+    bool required;
+    std::array<std::uint32_t, 3> header;    // leading words; a zero is not compared
 };
-inline std::vector<Stage> stages;
+// Models and packs are PO-layout (.txp header {0, 1, ...}); the lift archive
+// is PO Mtar version 19 with its two clips. The sound banks and the placement
+// archive are optional and checked again by the code that files them.
+constexpr File files[] = {
+    {"fult_item_balloon.txp", 0x10000u, true, {0u, 1u, 0u}},
+    {"fult_item_body.txp", 0x10000u, true, {0u, 1u, 0u}},
+    {"fult_item_balloon.mdp", 0x10000u, true, {0x2050444du, 0u, 0u}},
+    {"fult_item_body.mdp", 0x10000u, true, {0x2050444du, 0u, 0u}},
+    {"fult_enemy.mtar", 0x10000u, true, {0x7261744du, 19u, 2u}},
+    {"fult_place.mtar", 0x10000u, false, {0x7261744du, 19u, 1u}},
+    {"fulton.sep", 0x8000u, false, {}},
+    {"fulton-lift.sep", 0x11000u, false, {}},
+    {"fulton-foley.sep", 0x9000u, false, {}},
+};
 
-inline std::vector<std::uint8_t> read_stage(const Stage &stage) {
-    std::ifstream file(stage.replacement, std::ios::binary);
+// One bundle file, or empty when an optional one is absent. Throws on a file
+// that is present but not what its name says.
+inline std::vector<std::uint8_t> read(const std::filesystem::path &root, const File &file) {
+    const auto path = root / file.name;
     std::error_code error;
-    if (!file || std::filesystem::is_symlink(stage.replacement, error) || error) return {};
-    std::vector<std::uint8_t> bytes(stage.size);
-    if (!file.read(reinterpret_cast<char *>(bytes.data()), bytes.size()) || file.peek() != EOF ||
-        psprecomp::sha256_bytes(bytes) != stage.replacement_hash) return {};
+    const bool exists = std::filesystem::is_regular_file(path, error) && !std::filesystem::is_symlink(path, error);
+    if (!exists && !file.required) return {};
+    std::ifstream input(path, std::ios::binary);
+    std::vector<std::uint8_t> bytes(exists ? file.limit + 1u : 0u);
+    input.read(reinterpret_cast<char *>(bytes.data()), std::streamsize(bytes.size()));
+    bytes.resize(std::size_t(input.gcount()));
+    std::array<std::uint32_t, 3> header{};
+    if (bytes.size() >= 32) std::memcpy(header.data(), bytes.data(), sizeof(header));
+    bool valid = exists && bytes.size() >= 32 && bytes.size() <= file.limit;
+    for (std::size_t i = 0; i < header.size(); ++i)
+        valid = valid && (!file.header[i] || header[i] == file.header[i]);
+    if (!valid) throw std::runtime_error(std::string("Missing or invalid Fulton asset: ") + file.name);
     return bytes;
 }
 
-inline std::vector<Stage> checked_stages(const std::filesystem::path &root) {
-    const auto index_path = root / "index.txt";
-    if (std::filesystem::is_symlink(index_path) || std::filesystem::file_size(index_path) > 256u * 1024u)
-        throw std::runtime_error("Invalid Fulton stage index");
-    std::ifstream index(index_path);
-    if (!index) throw std::runtime_error("Cannot read Fulton stage index");
-    const auto hex = [](const std::string &value, std::size_t size) {
-        return value.size() == size && value.find_first_not_of("0123456789abcdef") == std::string::npos;
-    };
-    std::vector<Stage> result;
-    std::string line;
-    std::size_t total = 0;
-    while (std::getline(index, line)) {
-        Stage stage;
-        std::string filename, extra;
-        std::istringstream row(line);
-        if (result.size() == 256 ||
-            !(row >> stage.original_hash >> stage.size >> stage.prefix >> stage.replacement_hash >> filename) ||
-            (row >> extra) || !hex(stage.original_hash, 64) || !hex(stage.replacement_hash, 64) ||
-            !hex(stage.prefix, 128) || stage.size < 64 || stage.size > 32u * 1024u * 1024u ||
-            filename.find_first_of("/\\:") != std::string::npos ||
-            filename.find('\0') != std::string::npos ||
-            !filename.ends_with(".zar") || filename == ".zar")
-            throw std::runtime_error("Invalid Fulton stage index row");
-        stage.replacement = root / filename;
-        total += stage.size;
-        if (std::any_of(result.begin(), result.end(), [&](const Stage &other) {
-                return other.replacement == stage.replacement;
-            }) || std::filesystem::is_symlink(stage.replacement) ||
-            std::filesystem::file_size(stage.replacement) != stage.size ||
-            total > 512u * 1024u * 1024u || read_stage(stage).empty())
-            throw std::runtime_error("Fulton stage failed size/hash check: " + filename);
-        result.push_back(std::move(stage));
-    }
-    if (index.bad() || result.empty()) throw std::runtime_error("No readable converted Fulton stages installed");
-    return result;
+// Throws unless every required file is present and valid.
+inline void check(const std::filesystem::path &root) {
+    for (const auto &file : files) read(root, file);
 }
 
-// Copies a converted bundle into the port's user data: the index, the stages
-// it names and the known optional extras, nothing else. The copy is verified
-// before it replaces anything. Selection and the running game are untouched.
-inline std::size_t import_bundle(const std::filesystem::path &source) {
+// Copies a converted bundle into the port's user data: the named files and
+// nothing else. The copy is checked before it replaces anything. Selection
+// and the running game are untouched.
+inline void import_bundle(const std::filesystem::path &source) {
     namespace fs = std::filesystem;
-    const auto found = checked_stages(source);
     const auto destination = portablekit::install::user_data_directory() / "pw" / "fulton";
     std::error_code ignored;
     if (fs::equivalent(source, destination, ignored)) throw std::runtime_error("Folder is already the installed one");
@@ -100,91 +91,31 @@ inline std::size_t import_bundle(const std::filesystem::path &source) {
     fs::remove_all(staged);
     fs::create_directories(staged);
     try {
-        fs::copy_file(source / "index.txt", staged / "index.txt");
-        for (const auto &stage : found) fs::copy_file(stage.replacement, staged / stage.replacement.filename());
-        // Same names and size limits as scripts/fulton-assets.py.
-        for (const auto &[name, limit] : {std::pair{"fult_place.mtar", 0x10000u}, std::pair{"fulton.sep", 0x8000u},
-                                          std::pair{"fulton-lift.sep", 0x11000u},
-                                          std::pair{"fulton-foley.sep", 0x9000u}}) {
-            const auto extra = source / name;
-            if (!fs::is_symlink(extra) && fs::is_regular_file(extra) && fs::file_size(extra) <= limit)
-                fs::copy_file(extra, staged / name);
+        for (const auto &file : files) {
+            const auto bytes = read(source, file);
+            if (bytes.empty()) continue;
+            std::ofstream output(staged / file.name, std::ios::binary);
+            output.write(reinterpret_cast<const char *>(bytes.data()), std::streamsize(bytes.size()));
+            if (!output.flush()) throw std::runtime_error(std::string("Cannot write ") + file.name);
         }
-        const auto count = checked_stages(staged).size();
+        check(staged);
         fs::remove_all(destination);
         fs::rename(staged, destination);
-        return count;
     } catch (...) {
         fs::remove_all(staged, ignored);
         throw;
     }
 }
 
-class Filter final : public portablekit::hle_extension::FileFilter {
-public:
-    explicit Filter(std::vector<std::uint8_t> bytes) : bytes_(std::move(bytes)) {}
-    std::uint64_t size() const override { return bytes_.size(); }
-    std::size_t read(std::uint64_t offset, std::uint8_t *destination, std::size_t length) override {
-        if (offset >= bytes_.size()) return 0;
-        length = std::min(length, bytes_.size() - static_cast<std::size_t>(offset));
-        std::memcpy(destination, bytes_.data() + offset, length);
-        return length;
-    }
-private:
-    std::vector<std::uint8_t> bytes_;
-};
-inline std::map<std::uint32_t, std::shared_ptr<Filter>> installed;
-
-inline void before_read(std::uint32_t fd) {
-    if (installed.contains(fd)) return;
-    std::array<std::uint8_t, 64> prefix{};
-    if (portablekit::hle_extension::read_open_file(fd, 0, prefix) != prefix.size()) return;
-    constexpr char digits[] = "0123456789abcdef";
-    std::string hex;
-    for (auto byte : prefix) { hex += digits[byte >> 4]; hex += digits[byte & 15]; }
-    for (const auto &stage : stages) {
-        if (stage.prefix != hex) continue;
-        std::vector<std::uint8_t> original(stage.size);
-        if (portablekit::hle_extension::read_open_file(fd, 0, original) != original.size() ||
-            psprecomp::sha256_bytes(original) != stage.original_hash) return;
-        auto replacement = read_stage(stage);
-        if (replacement.empty()) {
-            std::cerr << "[fulton] donor stage failed size/hash check" << std::endl;
-            return;
-        }
-        auto filter = std::make_shared<Filter>(std::move(replacement));
-        if (portablekit::hle_extension::set_file_filter(fd, filter)) {
-            installed[fd] = std::move(filter);
-            std::cout << "[fulton] donor stage supplied: " << stage.replacement.filename().string() << std::endl;
-        }
-        return;
-    }
-}
-
-inline bool has_donors(const std::filesystem::path &root) {
-    std::error_code error;
-    for (const char *name : {"fult_item_balloon.txp", "fult_item_body.txp", "fult_item_balloon.mdp",
-                             "fult_item_body.mdp", "fult_enemy.mtar"})
-        if (std::filesystem::is_symlink(root / name, error) || !std::filesystem::is_regular_file(root / name, error))
-            return false;
-    return true;
-}
-
 inline void load() {
     // Startup snapshot: changing the selection or importing assets needs a
-    // restart. No UI thread changes a live stage filter or guest hook.
-    stages.clear();
+    // restart. No UI thread changes a live guest hook.
     try {
         selected = selection(portablekit::install::read_settings_file(portablekit::install::user_data_directory()));
-        // Standalone donors load in any stage; prepared stages are the older form.
-        if (has_donors(directory())) status = "Assets installed";
-        else {
-            stages = checked_stages(directory());
-            status = std::to_string(stages.size()) + " prepared stages";
-        }
+        check(directory());
         available = true;
+        status = "Assets installed";
     } catch (const std::exception &error) {
-        stages.clear();
         available = false;
         status = "Converted Fulton assets missing or invalid";
         std::cerr << "[fulton] inactive: " << error.what() << std::endl;
@@ -195,27 +126,5 @@ inline void load() {
     active = available && requested;
 }
 
-inline void install(portablekit::HleRegistrar &hle) {
-    load();
-    if (!active) return;
-    // The replacement has the original file's length, so getstat and disc
-    // directory sizes remain valid. Attach it before reads or seek ioctls.
-    for (auto nid : {0x6a638d83u, 0xa0b5a7c2u, 0x27eb27b8u, 0x68963324u,
-                     0x71b19e77u, 0x1b385d8fu, 0x63632449u, 0xe95a012bu}) {
-        auto previous = hle.bound_function("IoFileMgrForUser", nid);
-        if (!previous) continue;
-        hle.bind("IoFileMgrForUser", nid, [previous](auto &runtime, auto &ctx) {
-            before_read(ctx.gpr[4]);
-            previous(runtime, ctx);
-        });
-    }
-    for (auto nid : {0x810c4bc3u, 0xff5940b6u}) {
-        auto previous = hle.bound_function("IoFileMgrForUser", nid);
-        if (!previous) continue;
-        hle.bind("IoFileMgrForUser", nid, [previous](auto &runtime, auto &ctx) {
-            installed.erase(ctx.gpr[4]);
-            previous(runtime, ctx);
-        });
-    }
-}
+inline void install(portablekit::HleRegistrar &) { load(); }
 } // namespace mgs::fulton_assets

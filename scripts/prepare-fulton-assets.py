@@ -1,35 +1,15 @@
 #!/usr/bin/env python3
-"""Add local Fulton donors to stage archives without changing disc file sizes.
+"""Convert local PW PSP Fulton donors to the port's converted bundle.
 
-STAGES is an extracted PO stage directory. ASSETS contains the PW PSP balloon
-MDP and TXP (the TXP is converted to PO's layout) and fult_enemy.mtar, the
-soldier lift clips converted by tools/portable-ops/mtar.py. No donor data is shipped.
+ASSETS contains the PW PSP balloon and harness MDP and TXP (each TXP is
+converted to PO's layout) and fult_enemy.mtar, the soldier lift clips
+converted by tools/portable-ops/mtar.py. OUTPUT is the folder the Game tab's
+"Import Fulton assets" takes. Developer tool: the port's own importer will
+replace it. No donor data is shipped.
 """
 import argparse
-import hashlib
-import importlib.util
 from pathlib import Path
 import struct
-import sys
-import zlib
-
-spec = importlib.util.spec_from_file_location('stage_images', Path(__file__).with_name('stage-images.py'))
-stage_images = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = stage_images
-spec.loader.exec_module(stage_images)
-
-
-def pack(files):
-    data = bytearray(struct.pack('<I', len(files)))
-    for name, payload in files.items():
-        data += name.encode('latin1') + b'\0'
-        data += bytes(-len(data) % 4)
-        data += struct.pack('<I', len(payload))
-        data += bytes(-len(data) % 16)
-        data += payload + b'\0'
-    return bytes(data)
-
-
 def convert_txp(pw):
     """PW PSP texture pack to PO's layout (the one stage cache.qar files use).
 
@@ -97,47 +77,7 @@ def renumber_bank(sep, bank):
     return bytes(sep)
 
 
-def unpack(data):
-    return stage_images.zar_files(struct.pack('<I', len(data)) + zlib.compress(data))
-
-
-def patch(raw, donors):
-    files = stage_images.zar_files(raw)
-    if 'cache.dar' not in files:
-        raise ValueError('stage has no named cache.dar')
-    assets = unpack(files['cache.dar'])
-    if any(name in assets for name in donors):
-        raise ValueError('donor name already exists in stage')
-    assets.update(donors)
-    files['cache.dar'] = pack(assets)
-    data = pack(files)
-    compressed = struct.pack('<I', len(data)) + zlib.compress(data, 9)
-    if len(compressed) > len(raw):
-        raise ValueError(f'needs {len(compressed) - len(raw)} extra compressed bytes')
-    # The game can use the original ISO file size before opening it. Padding
-    # avoids changing those size contracts; the zlib stream ignores its tail.
-    output = compressed + bytes(len(raw) - len(compressed))
-    checked = stage_images.zar_files(output)
-    original = stage_images.zar_files(raw)
-    assert all(checked[k] == v for k, v in original.items() if k != 'cache.dar')
-    assert unpack(checked['cache.dar']) == assets
-    return output
-
-
 def self_test():
-    original = {'cache.dar': pack({'old.bin': b'unchanged'}), 'stage.rlc': b'code stays unchanged'}
-    plain = pack(original)
-    raw = struct.pack('<I', len(plain)) + zlib.compress(plain) + bytes(1024)
-    output = patch(raw, {'new.mtar': b'new data'})
-    assert len(raw) == len(output)
-    assert stage_images.zar_files(output)['stage.rlc'] == b'code stays unchanged'
-    assert unpack(stage_images.zar_files(output)['cache.dar'])['old.bin'] == b'unchanged'
-    try:
-        patch(raw, {'old.bin': b'overwrite'})
-    except ValueError:
-        pass
-    else:
-        raise AssertionError('existing resource overwritten')
     # One 64x64 4bpp image, two textures with their own CLUTs.
     pw = bytearray(struct.pack('<8I', 0, 0xABCDEF, 1, 2, 0x40, 0x20, 0x34, 0x90))
     pw += struct.pack('<4H3I', 4, 0x6040, 0x6040, 0, 0, 0x110, 0)
@@ -153,22 +93,20 @@ def self_test():
         assert po[clut:clut + 0x40] == bytes(range(0x40 * i, 0x40 * i + 0x40))
         record = struct.unpack_from('<12I', po, texture_table + 0x30 * i)
         assert record[:6] == (0x10, 0x100 + i, 0, 0x400040, 0, image_table + 0x10 * i)
-    print('Fulton archive round-trip, fixed-size, code-preservation and TXP conversion checks passed')
+    print('Fulton TXP conversion checks passed')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('stages', type=Path, nargs='?')
     parser.add_argument('assets', type=Path, nargs='?')
     parser.add_argument('output', type=Path, nargs='?')
-    parser.add_argument('--stage', action='append', default=[])
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
     if args.self_test:
         self_test()
         return
-    if not all((args.stages, args.assets, args.output)):
-        parser.error('provide STAGES ASSETS OUTPUT or --self-test')
+    if not all((args.assets, args.output)):
+        parser.error('provide ASSETS OUTPUT or --self-test')
     models = ('fult_item_balloon', 'fult_item_body')  # balloon; harness and tie
     donors = {name: (args.assets / name).read_bytes() for name in (
         *(m + ext for m in models for ext in ('.mdp', '.txp')), 'fult_enemy.mtar')}
@@ -203,18 +141,12 @@ def main():
             donors[model + '.txp'], donors[model + '.mdp'] = rename_textures(
                 donors[model + '.txp'], donors[model + '.mdp'], mapping)
             print(model + ':', ', '.join(f'texture {a:#x} -> {b:#x}' for a, b in mapping.items()))
-    # Texture packs first: a model binds the pack its header names (MDP +0x10)
-    # when it loads, so a pack added after its model leaves it untextured.
-    donors = {name: donors[name] for name in sorted(donors, key=lambda n: not n.endswith('.txp'))}
     if struct.unpack_from('<3I', donors['fult_enemy.mtar']) != (0x7261744d, 19, 2):
         parser.error('fult_enemy.mtar must be PO-format (tools/portable-ops/mtar.py, enedam clips 101 103)')
     args.output.mkdir(parents=True, exist_ok=True)
     if placement_bytes is not None:
-        # Loaded through PO's own resource handler once per stage; its ZAR
-        # need not grow to fit another motion archive.
         (args.output / 'fult_place.mtar').write_bytes(placement_bytes)
         print('fult_place.mtar: PW attachment as a standalone PO archive')
-    # The Fulton sound bank is filed by the host from memory, not from a stage.
     sound = args.assets / 'segrp_75_furuton.sep'
     if sound.exists():
         (args.output / 'fulton.sep').write_bytes(renumber_bank(sound.read_bytes(), 0x31))
@@ -235,27 +167,8 @@ def main():
             parser.error('fulton-foley.sep must be private bank 0x144 with four cues (fulton_sfx.py --foley)')
         (args.output / 'fulton-foley.sep').write_bytes(data)
         print('fulton-foley.sep: three attachment effects and soldier grunt')
-    rows = []
-    for folder in sorted(args.stages.iterdir()):
-        if not folder.is_dir() or (args.stage and folder.name not in args.stage):
-            continue
-        path = folder / '_zar'
-        if not path.exists():
-            continue
-        raw = path.read_bytes()
-        try:
-            output = patch(raw, donors)
-        except ValueError as error:
-            print(f'{folder.name}: skipped, {error}', file=sys.stderr)
-            continue
-        filename = folder.name + '.zar'
-        (args.output / filename).write_bytes(output)
-        rows.append(' '.join((hashlib.sha256(raw).hexdigest(), str(len(raw)),
-                              raw[:64].hex(), hashlib.sha256(output).hexdigest(), filename)))
-        print(f'{folder.name}: donors added, disc size unchanged ({len(output)} bytes)')
-    if not rows:
-        parser.exit(1, 'no stages prepared\n')
-    (args.output / 'index.txt').write_text('\n'.join(rows) + '\n')
+    for name, data in donors.items():
+        (args.output / name).write_bytes(data)
 
 
 if __name__ == '__main__':

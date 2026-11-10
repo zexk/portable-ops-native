@@ -30,6 +30,8 @@ to Portable Ops Native.
   and Game-tab enable/disable behavior with valid and missing assets.
 
 Fulton has an experimental Game-tab toggle and a Game-tab import of converted
-bundles (also `scripts/fulton-assets.py`). Its existing PSP donor preparation is not a player-facing importer.
+bundles. Donors load from memory in every stage; no stage file is replaced.
+Its PSP donor preparation (`scripts/prepare-fulton-assets.py`) is a developer
+tool, not a player-facing importer.
 Direct PSP ISO and MC imports remain pending; this pipeline is not yet
 production-ready.
