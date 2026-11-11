@@ -302,7 +302,13 @@ int main(int argc, char **argv) {
     mgs::fulton_visuals::state.snake = motion;
     mgs::fulton_visuals::state.snake.active = true;
     mgs::fulton_visuals::state.object = 0x09b60000u;
-    mgs::fulton_visuals::state.finish = [](auto &, bool) { assert(false); };
+    mgs::fulton_visuals::state.finish = [](auto &, bool, auto) { assert(false); };
+    // A soldier still lifting after his attach is held, and not offered again.
+    mgs::fulton_visuals::detached.push_back({.phase = mgs::fulton_visuals::Phase::Settle, .enemy = work});
+    mgs::fulton_visuals::detached.back().soldier.motion = 0x09a00000u;
+    mgs::fulton_visuals::detached.back().soldier.active = true;
+    assert(mgs::fulton_visuals::lifting(work) && mgs::fulton_visuals::holds(0x09a00000u));
+    assert(!mgs::fulton_visuals::lifting(work + 4u) && mgs::fulton_visuals::engaged());
     mgs::fulton_visuals::selecting_motion = true;
     mgs::fulton_visuals::placement_prepared = mgs::fulton_visuals::donors_prepared = true;
     mgs::fulton_sound::current = mgs::fulton_sound::lift_current = mgs::fulton_sound::foley_current = true;
@@ -310,6 +316,7 @@ int main(int argc, char **argv) {
     watch_work = work; watch_frames = 90;
     original_stage_init = [](auto &, auto &) {
         assert(mgs::fulton_visuals::state.phase == mgs::fulton_visuals::Phase::Idle);
+        assert(mgs::fulton_visuals::detached.empty());
         assert(!mgs::fulton_visuals::state.finish && !mgs::fulton_visuals::state.snake.active);
         assert(mgs::fulton_visuals::learned.empty());
         assert(!mgs::fulton_visuals::selecting_motion);

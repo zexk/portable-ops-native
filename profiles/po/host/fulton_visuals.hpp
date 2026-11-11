@@ -5,6 +5,7 @@
 #include "fulton_geometry.hpp"
 #include "fulton_sound.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -17,7 +18,8 @@ constexpr std::uint32_t base = 0x08804000u;
 using Context = psprecomp::AllegrexContext;
 using Runtime = psprecomp::Runtime;
 using Resume = std::function<void(Context &)>;
-using Finish = std::function<void(Context &, bool)>;
+// Called with whether the lift completed, and what to go on with after it.
+using Finish = std::function<void(Context &, bool, Resume)>;
 
 // The attach plays PO's own crouch-and-place clip (TNT, claymore, magazine):
 // archive sna_wp_claymore (GV_StrCode 0xCCBFF6), clip 0x25, full-body bone
@@ -86,6 +88,14 @@ struct State {
     Finish finish;
 };
 inline State state;
+// Lifts whose attach has ended: they go on by themselves, so the player can
+// start another. Each takes its turn as `state` in tick_all.
+inline std::vector<State> detached;
+inline bool engaged() { return state.phase != Phase::Idle; }
+inline bool lifting(std::uint32_t enemy) {
+    const auto has = [enemy](const State &s) { return s.phase != Phase::Idle && s.enemy == enemy; };
+    return has(state) || std::any_of(detached.begin(), detached.end(), has);
+}
 
 inline std::vector<std::uint32_t> extra_sounds(Phase phase, float cursor, float end,
                                               bool pw_attach, unsigned &played) {
@@ -185,8 +195,10 @@ inline void prepare_place(Runtime &runtime, Context &ctx, Resume next) {
 }
 
 inline bool holds(std::uint32_t motion) {
-    return (state.snake.active && motion == state.snake.motion) ||
-           (state.soldier.active && motion == state.soldier.motion);
+    const auto has = [motion](const State &s) {
+        return (s.snake.active && motion == s.snake.motion) || (s.soldier.active && motion == s.soldier.motion);
+    };
+    return has(state) || std::any_of(detached.begin(), detached.end(), has);
 }
 
 inline void motion_reset(psprecomp::CorpusRuntime &runtime, Context &ctx) {
@@ -227,8 +239,9 @@ inline void motion_select(psprecomp::CorpusRuntime &runtime, Context &ctx) {
 }
 
 inline void invalidate() {
-    if (state.phase != Phase::Idle)
+    if (state.phase != Phase::Idle || !detached.empty())
         std::cout << "[fulton] visual sequence cancelled by stage change" << std::endl;
+    detached.clear();
     // Stage resources and tracked render allocations belong to the game.
     // Their old addresses must not be dereferenced after a module transition.
     state = {};
@@ -241,14 +254,15 @@ inline void invalidate() {
 template<class Memory>
 void hand_back(Memory &memory, Context &ctx, Override &ov, std::function<void(Context &)> next);
 
-inline void dispose(Runtime &runtime, Context &ctx, bool complete) {
+inline void dispose(Runtime &runtime, Context &ctx, bool complete, Resume next) {
     const auto saved = ctx;
-    auto finish = [saved, complete](Context &context) {
+    auto finish = [saved, complete, next](Context &context) {
         auto callback = std::move(state.finish);
         state = {};
         selecting_motion = false;
         context = saved;
-        if (callback) callback(context, complete);
+        if (callback) callback(context, complete, next);
+        else next(context);
     };
     auto &memory = runtime.memory();
     restore_facing(memory);
@@ -386,15 +400,15 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
     if (!original_motion || !state.snake.capture(memory, memory.load32(player + 0x1e8u)) ||
         !state.soldier.capture(memory, soldier)) {
         std::cerr << "[fulton] player or soldier motion not found" << std::endl;
-        dispose(runtime, ctx, false);
+        dispose(runtime, ctx, false, resume);
         return;
     }
     for (unsigned i = 0; i < 3; ++i)
         state.position[i] = std::bit_cast<float>(memory.load32(enemy + 0x30u + i * 4u));
-    auto fail = [&runtime, saved](Context &context, const char *why) {
+    auto fail = [&runtime, saved, resume](Context &context, const char *why) {
         std::cerr << "[fulton] " << why << std::endl;
         context = saved;
-        dispose(runtime, context, false);
+        dispose(runtime, context, false, resume);
     };
     // The sound bank first: a stage load resets the heap it lives in.
     fulton_sound::prepare(runtime, ctx, [&runtime, saved, resume, fail](Context &ctx) {
@@ -462,10 +476,10 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     auto &memory = runtime.memory();
     if (state.player != player || !memory.contains(state.object, 0x100u) || !memory.contains(state.harness, 0x100u) ||
         !memory.contains(state.snake.channel, 0x100) || !memory.contains(state.soldier.channel, 0x100) ||
-        !memory.contains(state.enemy + 0x30u, 12u)) { dispose(runtime, ctx, false); return true; }
+        !memory.contains(state.enemy + 0x30u, 12u)) { dispose(runtime, ctx, false, resume); return true; }
     if (++state.frames > 900) {
         std::cerr << "[fulton] sequence timed out; capture cancelled" << std::endl;
-        dispose(runtime, ctx, false);
+        dispose(runtime, ctx, false, resume);
         return true;
     }
     ++state.phase_frames;
@@ -528,7 +542,7 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
             lift_effect = 1;
         }
         if (state.phase_frames > 2 && (state.soldier.ended(memory) || (end > 0 && frame >= end - 1))) {
-            dispose(runtime, ctx, true);
+            dispose(runtime, ctx, true, resume);
             return true;
         }
         break;
@@ -592,6 +606,29 @@ inline bool tick(Runtime &runtime, Context &ctx, std::uint32_t player, Resume re
     if (sound) fulton_sound::play(memory, ctx, state.enemy + 0x30u, extras);
     else extras(ctx);
     return true;
+}
+
+// One tick of every lift, the detached ones first, then next. A lift that
+// ends in its turn leaves an idle slot, dropped once all have had theirs.
+inline void tick_all(Runtime &runtime, Context &ctx, std::uint32_t player, Resume next, std::size_t at = 0) {
+    Resume after;
+    if (at < detached.size()) {
+        std::swap(state, detached[at]);
+        after = [&runtime, player, next, at](Context &context) {
+            std::swap(state, detached[at]);
+            tick_all(runtime, context, player, next, at + 1);
+        };
+    } else {
+        after = [next](Context &context) {
+            std::erase_if(detached, [](const State &s) { return s.phase == Phase::Idle; });
+            if (state.phase > Phase::Attaching) {
+                detached.push_back(std::move(state));
+                state = {};
+            }
+            next(context);
+        };
+    }
+    if (!tick(runtime, ctx, player, after)) after(ctx);
 }
 
 inline void install(Runtime &runtime) {

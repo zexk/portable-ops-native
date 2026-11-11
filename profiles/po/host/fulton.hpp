@@ -129,7 +129,8 @@ Target nearest(const Memory &memory, std::uint32_t player) {
                     const float yaw = float(memory.load32(player + 0x130u) >> 16) * (6.2831853f / 65536.0f);
                     const bool faced = std::sin(yaw) * to[0] + std::cos(yaw) * to[2] >= facing * std::sqrt(squared);
                     if (std::isfinite(squared) && squared < distance && faced) {
-                        if (eligible(memory, target)) { best = target; distance = squared; }
+                        if (fulton_visuals::lifting(target.work)) {
+                        } else if (eligible(memory, target)) { best = target; distance = squared; }
                         else if (memory.load32(target.work + 0x1850u) >= 20u &&
                                  memory.load32(target.work + 0x1850u) < 54u) {
                             // A Triangle press is the only caller during play. Keep
@@ -165,11 +166,58 @@ inline std::uint32_t notify = 0, cleanup = 0;
 inline bool held = false, busy = false;
 inline std::uint32_t watch_work = 0; inline unsigned watch_frames = 0; // post-capture trace
 
+
+// The capture script ends by creating the "capture completed" banner: chara
+// 0x26E0F6, whose constructor (st01t2 +0xA9C4, live ULUS-10202 1.02) plays
+// jingle 0x147 through a stage sound helper and then makes the banner actor,
+// at once or 90 frames later for some soldiers. A Fulton capture keeps the
+// jingle and drops the banner: for a while after one, the constructor only
+// plays the sound and answers as it does when a banner is already up.
+inline psprecomp::Runtime::RecompiledFunction original_banner = nullptr;
+inline std::uint32_t stage_base = 0, banner = 0, banner_sound = 0;
+inline bool banner_searched = false;
+inline unsigned quiet_frames = 0;
+
+inline void banner_create(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexContext &ctx) {
+    if (!quiet_frames) { original_banner(corpus, ctx); return; }
+    const auto saved = ctx;
+    portablekit::hle_extension::call_guest(ctx, banner_sound, {0x147u, 0x2du, 1u, 0u},
+        [saved](auto &returned, std::uint32_t) {
+            returned = saved;
+            returned.gpr[2] = 1;
+            returned.gpr[3] = 0;
+            returned.pc = returned.gpr[31];
+        });
+}
+
+// Each stage module carries the chara table, {id, constructor} pairs; found
+// once the module is linked, by the id and the constructor's own two constants.
+inline void find_banner(psprecomp::Runtime &runtime) {
+    if (banner_searched || !stage_base) return;
+    banner_searched = true;
+    const auto &memory = runtime.memory();
+    for (std::uint32_t at = stage_base; memory.contains(at, 8u) && at < stage_base + 0x200000u; at += 4u) {
+        if (memory.load32(at) != 0x26e0f6u) continue;
+        const auto made = memory.load32(at + 4u);
+        if (made < stage_base || !memory.contains(made, 0x60u) || memory.load32(made + 0x14u) != 0x2405002du ||
+            memory.load32(made + 0x38u) != 0x24040147u || memory.load32(made + 0x5cu) >> 26u != 3u) continue;
+        const auto found = runtime.registered_function(made);
+        if (!found || found == &banner_create) return;
+        original_banner = found;
+        banner = made;
+        banner_sound = (made & 0xf0000000u) | (memory.load32(made + 0x5cu) & 0x03ffffffu) << 2u;
+        runtime.register_function(made, &banner_create, "po_fulton_banner");
+        std::cout << "[fulton] capture banner found" << std::endl;
+        return;
+    }
+}
+
 inline void reset_stage() {
     fulton_visuals::invalidate();
     fulton_sound::stage_changed();
     held = busy = false;
     watch_work = watch_frames = 0;
+    quiet_frames = 0;
 }
 
 // ULUS-10202 1.02: the stage's first function clears its BSS. Mission retry
@@ -185,6 +233,9 @@ inline void module_ready(psprecomp::Runtime &runtime, std::string_view name, std
     if (!original_update) return;
     if (name == "mgp_stage") {
         reset_stage();
+        stage_base = base;
+        banner = banner_sound = 0;
+        banner_searched = false;
         original_stage_init = runtime.registered_function(base);
         if (original_stage_init)
             runtime.register_function(base, &stage_init, "po_fulton_stage_init");
@@ -196,35 +247,39 @@ inline void module_ready(psprecomp::Runtime &runtime, std::string_view name, std
     std::cout << "[fulton] stage capture helpers found" << std::endl;
 }
 
-inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx, Target target, bool animated = false) {
+// Then next, with the context as it came in.
+inline void capture(psprecomp::Runtime &runtime, psprecomp::AllegrexContext &ctx, Target target, bool animated,
+                    fulton_visuals::Resume next) {
     auto &memory = runtime.memory();
     const auto system = memory.load32(engine + 0x1f11d0u);
     if (!memory.contains(system, 0x71acu) || !(animated ? same(memory, target) : eligible(memory, target)) ||
         !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape)) {
         busy = false;
         std::cout << "[fulton] target or stage changed; capture cancelled" << std::endl;
-        original_update(runtime, ctx);
+        next(ctx);
         return;
     }
     const auto before = memory.load32(system + 0x3c98u);
     if (before >= 80u) {
         busy = false;
         std::cout << "[fulton] pending captures full" << std::endl;
-        original_update(runtime, ctx);
+        next(ctx);
         return;
     }
     const auto saved = ctx;
     const auto cleanup_address = cleanup;
     busy = true;
+    find_banner(runtime);
+    if (banner) quiet_frames = 150;
     // Run the real script callback in this guest thread, with scheduler/HLE
     // support. A single isolated AOT unit cannot execute a whole GCL call.
     portablekit::hle_extension::call_guest(ctx, notify, {target.work},
-        [&runtime, saved, target, before, system, cleanup_address, animated](auto &returned, std::uint32_t) {
+        [&runtime, saved, target, before, system, cleanup_address, animated, next](auto &returned, std::uint32_t) {
             auto &memory = runtime.memory();
-            const auto finish = [&runtime, saved](auto &context) {
+            const auto finish = [saved, next](auto &context) {
                 busy = false;
                 context = saved;
-                original_update(runtime, context);
+                next(context);
             };
             if (memory.load32(engine + 0x1f11d0u) != system ||
                 !appended(memory, system, before, target)) {
@@ -262,7 +317,10 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
     const auto player = ctx.gpr[4];
     const auto resume = [&runtime](auto &context) { original_update(runtime, context); };
     if (!memory.contains(player, 0xc00u) || memory.load32(engine + 0x2f7060u) != player) { resume(ctx); return; }
-    if (fulton_visuals::tick(runtime, ctx, player, resume)) return;
+    // Every lift in flight has its tick first; the rest runs after them.
+    fulton_visuals::tick_all(runtime, ctx, player, [&runtime, player, resume](auto &ctx) {
+    auto &memory = runtime.memory();
+    if (quiet_frames) --quiet_frames;
     if (watch_frames && --watch_frames % 10 == 0 && memory.contains(watch_work, 0x1bb0u)) {
         const auto component = memory.load32(watch_work + 0x10u);
         std::cout << std::hex << "[fulton] after capture: component " << (memory.contains(component, 4u) ? memory.load32(component) : 0)
@@ -275,7 +333,9 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
     const bool pressed = down && !held;
     held = down;
     const auto system = memory.load32(engine + 0x1f11d0u);
-    if (!pressed || busy || !memory.contains(system, 0x71acu) ||
+    // One attach at a time: the player is free again once his own clip ends,
+    // while the soldiers he has attached go on lifting.
+    if (!pressed || busy || fulton_visuals::engaged() || !memory.contains(system, 0x71acu) ||
         memory.load32(engine + 0x20f790u) == 0u || memory.load32(player + 0x58u) != 0x7e8110u ||
         (memory.load32(engine + 0x258b74u) & 0x2000u) != 0u ||
         !matches(memory, notify, notify_shape) || !matches(memory, cleanup, cleanup_shape) ||
@@ -288,17 +348,16 @@ inline void player_update(psprecomp::CorpusRuntime &corpus, psprecomp::AllegrexC
     const auto target = nearest(memory, player);
     if (!target.work) { resume(ctx); return; }
     if (fulton_assets::enabled()) {
-        busy = true;
         fulton_visuals::begin(runtime, ctx, player, target.work, resume,
-            [&runtime, target](auto &context, bool complete) {
-                busy = false;
-                if (complete) capture(runtime, context, target, true);
+            [&runtime, target](auto &context, bool complete, fulton_visuals::Resume next) {
+                if (complete) capture(runtime, context, target, true, next);
                 else {
                     std::cout << "[fulton] visual sequence cancelled; soldier retained" << std::endl;
-                    original_update(runtime, context);
+                    next(context);
                 }
             });
-    } else capture(runtime, ctx, target);
+    } else capture(runtime, ctx, target, false, resume);
+    });
 }
 
 inline void install(psprecomp::Runtime &runtime) {
