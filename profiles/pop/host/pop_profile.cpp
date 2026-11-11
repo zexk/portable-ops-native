@@ -155,6 +155,7 @@ const GameProfile &game() {
         .save_folders = kSaveFolders,
 
         .adhoc_product_code = kRelease.disc_id,
+        .adhoc_menu = false,
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 

@@ -91,6 +91,7 @@ const GameProfile &game() {
         .save_folders = kSaveFolders,
 
         .adhoc_product_code = "ULUS10202",
+        .adhoc_menu = false,
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
 
