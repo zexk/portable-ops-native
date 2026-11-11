@@ -44,7 +44,12 @@ Press **Esc** or **L3 + R3** to open the settings menu. Bindings are in
 **Video**.
 
 - **F3**: toggle the performance overlay
+- **F11**: switch between fullscreen and a window
 - **F12**: save a screenshot in the user-data folder's `screenshots/`
+  (**System > Open the screenshots folder**)
+
+**Game > Menu > Open the menu when switching away** (off by default) brings
+up the pause menu when another window takes the focus.
 
 Both games have **Game > Startup** toggles for skipping the logos and opening
 movie. **Game > Controls > Analog stalking** (off by default) stalks while the
