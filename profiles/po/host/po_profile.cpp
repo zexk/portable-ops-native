@@ -46,6 +46,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera_follow(runtime, kCameraUpdate);
     mgs::install_model_trace(runtime, 0x08804000u + 0x45EA4u, 0x08804000u + 0x45954u);
     mgs::install_camera_trace(runtime, kCameraUpdate);
+    mgs::install_look(runtime, 0x08804000u + 0x10A4D8u, 0x08804000u + 0x1F0FD8u);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
     mgs::crouchwalking::install(runtime);

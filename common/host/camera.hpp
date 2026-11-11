@@ -196,26 +196,34 @@ inline void swap_sticks(psprecomp::GuestMemory &memory, std::uint32_t player) {
     memory.store32(player + 0x744u, length);
 }
 
-// First-person look (0x10B4AC in PO) reads the stick one axis at a time:
-// nothing within 0x23 of centre, then the square of the rest as the turn
-// rate. A stick held off an axis therefore loses its smaller part and the
-// view snaps to eight directions. The bytes of the stick the look chooser
-// picks are rewritten so the game's own arithmetic turns along the stick's
-// true direction, at the rate its square gives the stick's length.
+// First-person look (component 0x10A4D8 in PO, its stick code at 0x10B4AC)
+// reads the stick one axis at a time. Within 0x23 of centre an axis gives
+// nothing; beyond it the square of the rest is a small turn rate (work
+// +0x8C/+0x8E) and also feeds a second, accelerating pair (+0x88/+0x8A) that
+// climbs to the same cap on each axis however far the stick is pushed. That
+// pair is most of the turn (1092 against 180 a frame), so any held direction
+// ends as a pure diagonal or a pure axis: eight directions. Two corrections
+// make the game's own arithmetic follow the stick: the bytes of the stick the
+// look chooser picks are rewritten so each axis' rate is its share of the
+// stick's direction, and each axis' accelerating turn is held to that share
+// of the cap, times how far the stick is pushed.
+inline float aim_share[2] = {1.0f, 1.0f};  // x, y: 1 leaves the game's cap alone
+inline std::uint32_t aim_player = 0u;      // whose stick the shares are from
+
 inline void radial_aim(psprecomp::GuestMemory &memory, std::uint32_t bytes) {
-    const float x = static_cast<std::int8_t>(memory.load8(bytes)), y = static_cast<std::int8_t>(memory.load8(bytes + 1u));
+    const float axis[2] = {static_cast<float>(static_cast<std::int8_t>(memory.load8(bytes))),
+                           static_cast<float>(static_cast<std::int8_t>(memory.load8(bytes + 1u)))};
     // The nub's own dead zone (strength below 0x30 of 255), taken off the length.
     constexpr float dead = 48.0f / 255.0f;
-    const float length = std::min(std::hypot(x, y) / 127.0f, 1.0f);
+    const float length = std::min(std::hypot(axis[0], axis[1]) / 127.0f, 1.0f);
     const float push = std::max(length - dead, 0.0f) / (1.0f - dead);
-    const auto byte = [&](float axis) {
-        if (push == 0.0f || axis == 0.0f) return std::uint8_t{0};
-        const float part = std::fabs(axis) / (length * 127.0f);  // this axis' share of the direction
-        const float value = 35.0f + 92.0f * push * std::sqrt(std::min(part, 1.0f));
-        return static_cast<std::uint8_t>(static_cast<std::int8_t>(std::copysign(std::round(value), axis)));
-    };
-    memory.store8(bytes, byte(x));
-    memory.store8(bytes + 1u, byte(y));
+    for (unsigned i = 0; i < 2; ++i) {
+        // This axis' share of the direction, times the push.
+        const float part = push == 0.0f ? 0.0f : std::min(std::fabs(axis[i]) / std::hypot(axis[0], axis[1]), 1.0f) * push;
+        aim_share[i] = part;
+        const float value = part == 0.0f ? 0.0f : std::copysign(std::round(35.0f + 92.0f * std::sqrt(part * push)), axis[i]);
+        memory.store8(bytes + i, static_cast<std::uint8_t>(static_cast<std::int8_t>(value)));
+    }
 }
 
 inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
@@ -225,10 +233,60 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
     const portablekit::settings::Settings &settings = portablekit::settings::current();
     if (settings.analog_camera) feed_camera_stick(static_cast<psprecomp::Runtime &>(rt), ctx, player);
     if (settings.swap_sticks_first_person && first_person_swapped(memory, player)) swap_sticks(memory, player);
+    if (player == aim_player) aim_share[0] = aim_share[1] = 1.0f;
     // <prefix>_NO_RADIAL_AIM keeps the game's own first-person response.
     static const bool radial = portablekit::hle_extension::env("NO_RADIAL_AIM") == nullptr;
-    if (radial && (action(memory, player, 0xbau) || action(memory, player, 7u)))
-        radial_aim(memory, player + (first_person_swapped(memory, player) ? 0x732u : 0x73eu));
+    if (!action(memory, player, 0xbau) && !action(memory, player, 7u)) return;
+    const std::uint32_t bytes = player + (first_person_swapped(memory, player) ? 0x732u : 0x73eu);
+    // <prefix>_TRACE_AIM: both sticks as the game left them and the look stick after the rewrite.
+    static const bool trace = portablekit::hle_extension::env("TRACE_AIM") != nullptr;
+    const auto s8 = [&](std::uint32_t at) { return int(static_cast<std::int8_t>(memory.load8(at))); };
+    const int raw[4] = {s8(player + 0x732u), s8(player + 0x733u), s8(player + 0x73eu), s8(player + 0x73fu)};
+    if (radial) {
+        radial_aim(memory, bytes);
+        aim_player = player;
+    }
+    if (trace && (raw[0] || raw[1] || raw[2] || raw[3]))
+        std::cout << "[aim] move " << raw[0] << ' ' << raw[1] << " camera " << raw[2] << ' ' << raw[3] << " look@"
+                  << std::hex << (bytes - player) << std::dec << ' ' << s8(bytes) << ' ' << s8(bytes + 1u) << std::endl;
+}
+
+// The look component, entered with the player, its work and a phase. Before
+// its movement phase (0x20) the accelerating turn the last frame left is held
+// to each axis' share of the cap (step * 0x16C / 5, or 0x222 with flag 0xDD).
+struct LookState {
+    psprecomp::Runtime::RecompiledFunction component = nullptr;
+    std::uint32_t step = 0u;  // the engine's frame step
+};
+inline LookState look_state;
+
+inline void look_component(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
+    auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
+    const std::uint32_t player = ctx.gpr[4], work = ctx.gpr[5];
+    if (ctx.gpr[6] == 0x20u && memory.contains(player, 0xc00u) && memory.contains(work, 0xc0u)) {
+        const auto turn = [&](std::uint32_t at) { return static_cast<int>(static_cast<std::int16_t>(memory.load16(work + at))); };
+        static const bool trace = portablekit::hle_extension::env("TRACE_AIM") != nullptr;
+        if (trace && (turn(0x8cu) || turn(0x8eu) || turn(0x88u) || turn(0x8au)))
+            std::cout << "[look] rate " << turn(0x8eu) << ' ' << turn(0x8cu) << " accel " << turn(0x8au) << ' '
+                      << turn(0x88u) << " angle " << turn(0x72u) << ' ' << turn(0x70u) << " share " << aim_share[0] << ' '
+                      << aim_share[1] << (player == aim_player ? " own" : " other") << std::endl;
+        const int cap = static_cast<int>(memory.load32(look_state.step)) * (action(memory, player, 0xddu) ? 0x222 : 0x16c) / 5;
+        for (unsigned i = 0; i < 2; ++i) {
+            if (player != aim_player || aim_share[i] >= 1.0f) continue;
+            const std::uint32_t at = i == 0 ? 0x8au : 0x88u;  // x turns through +0x8A, y through +0x88
+            const int limit = static_cast<int>(static_cast<float>(cap) * aim_share[i]);
+            memory.store16(work + at, static_cast<std::uint16_t>(std::clamp(turn(at), -limit, limit)));
+        }
+    }
+    look_state.component(rt, ctx);
+}
+
+inline void install_look(psprecomp::Runtime &runtime, std::uint32_t component, std::uint32_t step) {
+    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(component);
+    if (original == nullptr || original == &look_component) return;
+    look_state = {original, step};
+    runtime.register_function(component, &look_component, "mgs_look_component");
+    std::cout << "[look] first-person turn follows the stick at 0x" << std::hex << component << std::dec << std::endl;
 }
 
 inline void camera_frame(psprecomp::Runtime &) { portablekit::camera::discard(); }
