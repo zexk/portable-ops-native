@@ -397,7 +397,13 @@ removes the whole wait. Model (3 ms code, 1 ms margin), total delay:
 
 `CHECK_REPLAY` now also replays the newer frame through the carrying path at
 a factor just above 1 and counts pixels differing from its own picture.
-Not yet verified live or for physical button-to-screen latency.
+Live, PO NA 1.02 at 144 Hz, 2026-11-11: the full lead carried a 20 fps frame
+up to 48 ms on and juddered with every change of motion, though pacing and
+the replay checks were clean (camera turn deltas change by up to 1.3 degrees
+a frame). Carrying is now capped at one vblank (`kMaxCarryUs`, PortableKit
+97fc08d): at 100% the lead reads 16.7 ms, the delay about 36 ms against 61
+at 0%, and the user reports no judder. The table above predates the cap.
+Physical button-to-screen latency is still unmeasured.
 
 **A frame held by the game itself** (2026-11-10, ULUS-10202 1.02,
 `MGSPO_TRACE_PACING`). Apart from interpolation, the game's main loop does
