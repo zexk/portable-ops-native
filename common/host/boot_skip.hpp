@@ -41,11 +41,20 @@
 #include <iostream>
 
 namespace mgs::boot_skip {
-constexpr std::uint32_t kBase = 0x08804000u;
-constexpr std::uint32_t kCallProcedure = kBase + 0x3df48u, kReturnedToTitle = kBase + 0x220cd8u + 0x120u;
-constexpr std::uint32_t kTitle = 232u;
-// title.prx: the logo actor's update with its first words, and two of its state functions.
-constexpr std::uint32_t kLogoUpdate = 0x2f058u, kLogoFirst = 0x2ef78u, kLogoDone = 0x2eddcu;
+// The numbers above are PO's. PO+ has the same scenario and logo actor under
+// other numbers (US 1.01, EU 1.00, JP 1.03, read from each disc's title
+// scenario and title.prx): the title procedure is 103 (EU 104), the word is
+// var 0x3E4, and the engine holds a pointer to the bank, not the bank.
+struct Addresses {
+    std::uint32_t call_procedure;  // guest address of the engine's procedure call
+    std::uint32_t bank;            // the global script bank, or the pointer to it
+    bool bank_is_pointer;
+    std::uint32_t returned;        // the bank word that is nonzero on a return to the title
+    std::uint32_t title;           // the procedure that creates the title actor
+    // title.prx: the logo actor's update and two of its state functions.
+    std::uint32_t logo_update, logo_first, logo_done;
+};
+inline Addresses at{};
 constexpr std::array<std::uint32_t, 4> kLogoUpdateShape{0x27bdfff0u, 0xafb00000u, 0xafbf0004u, 0x8c820058u};
 
 inline bool logos = false, movie = false;  // what is skipped, as saved
@@ -86,8 +95,9 @@ inline void call_procedure(psprecomp::CorpusRuntime &runtime, psprecomp::Allegre
     if (trace) std::cout << "[proc] " << presence::state.stage << ' ' << std::dec << ctx.gpr[4] << std::endl;
     if ((logos || movie) && presence::state.stage == "title") {
         auto &memory = static_cast<psprecomp::Runtime &>(runtime).memory();
-        if (movie && ctx.gpr[4] == kTitle && memory.load32(kReturnedToTitle) == 0u) {
-            memory.store32(kReturnedToTitle, 1u);
+        const std::uint32_t word = (at.bank_is_pointer ? memory.load32(at.bank) : at.bank) + at.returned;
+        if (movie && ctx.gpr[4] == at.title && memory.contains(word, 4u) && memory.load32(word) == 0u) {
+            memory.store32(word, 1u);
             std::cout << "[startup] opening movie skipped" << std::endl;
         }
     }
@@ -98,8 +108,8 @@ inline void logo_update(psprecomp::CorpusRuntime &runtime, psprecomp::AllegrexCo
     auto &memory = static_cast<psprecomp::Runtime &>(runtime).memory();
     const std::uint32_t state = ctx.gpr[4] + 0x58u;
     if (logos && presence::state.stage == "title" && memory.contains(state, 4u) &&
-        memory.load32(state) == title_base + kLogoFirst) {
-        memory.store32(state, title_base + kLogoDone);
+        memory.load32(state) == title_base + at.logo_first) {
+        memory.store32(state, title_base + at.logo_done);
         std::cout << "[startup] logo screens skipped" << std::endl;
     }
     original_logo_update(runtime, ctx);
@@ -108,22 +118,23 @@ inline void logo_update(psprecomp::CorpusRuntime &runtime, psprecomp::AllegrexCo
 // The title stage's module is in place: wrap its logo actor's update.
 inline void module_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                          std::span<const std::uint8_t> code) {
-    if (name != "mgp_stage" || presence::state.stage != "title" || code.size() < kLogoUpdate + 16u) return;
+    if (name != "mgp_stage" || presence::state.stage != "title" || code.size() < at.logo_update + 16u) return;
     std::array<std::uint32_t, 4> words{};
-    std::memcpy(words.data(), code.data() + kLogoUpdate, sizeof(words));
-    const auto original = runtime.registered_function(base + kLogoUpdate);
+    std::memcpy(words.data(), code.data() + at.logo_update, sizeof(words));
+    const auto original = runtime.registered_function(base + at.logo_update);
     if (words != kLogoUpdateShape || original == nullptr || original == &logo_update) return;
     original_logo_update = original;
     title_base = base;
-    runtime.register_function(base + kLogoUpdate, &logo_update, "mgs_logo_update");
+    runtime.register_function(base + at.logo_update, &logo_update, "mgs_logo_update");
 }
 
-inline void install(psprecomp::Runtime &runtime) {
+inline void install(psprecomp::Runtime &runtime, const Addresses &addresses) {
+    at = addresses;
     load();
-    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(kCallProcedure);
+    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(at.call_procedure);
     if (original == nullptr || original == &call_procedure) return;
     original_call = original;
-    runtime.register_function(kCallProcedure, &call_procedure, "mgs_call_procedure");
+    runtime.register_function(at.call_procedure, &call_procedure, "mgs_call_procedure");
 }
 
 inline void reset() {

@@ -73,15 +73,18 @@ justify a separate feature without a concrete missing behavior.
 
 ## 5. Startup skips
 
-PO has Game > Startup toggles for the logo screens and the opening movie
-([`boot_skip.hpp`](../profiles/po/host/boot_skip.hpp); the title scenario's
+PO and PO+ have Game > Startup toggles for the logo screens and the opening movie
+([`boot_skip.hpp`](../common/host/boot_skip.hpp); the title scenario's
 flow is in [stage identity](../../docs/portable-ops/feature-hooks.md#title-startup-flow)).
 Bounded boots with the two environment overrides: the title actor starts
 1 s into the title stage instead of 13 s with the logos skipped, and with
 the movie skipped a captured frame shows the title menu, where the
 unskipped run shows the movie's Press Start screen. The toggles themselves
 (drawing, saving) are compiled but not exercised, nor is a return to the
-title from a game. PO+ has its own title module and is not covered.
+title from a game. PO+ (US, EU, JP) uses the same hooks with its own
+numbers; bounded headless boots with both overrides reached the title menu
+in all three on 2026-11-11. Its toggles and a return to the title from a
+game are not exercised.
 
 ## 6. Save states and quick resume
 
@@ -255,7 +258,7 @@ switched soldiers to their full models. See
 [distance LOD table](../../docs/portable-ops/feature-hooks.md#distance-lod-table).
 
 
-**Implemented** ([`detail_distance.hpp`](../profiles/po/host/detail_distance.hpp)):
+**Implemented** ([`detail_distance.hpp`](../common/host/detail_distance.hpp)):
 Video's Detail distance (100-400%) wraps GCL handler `0x15324` and scales the
 squared distances of the records that call wrote. The per-actor update
 `0x15C48` cannot be wrapped: every caller is in its own generated unit, where
@@ -264,6 +267,9 @@ gave 21000/36000 in place of 7000/12000. The same setting scales the foot
 shadow fade (floats `0x1EA680`/`0x1EA684`, 5000 and 10000 units, used only
 by update `0x14F70C`), written at the same moment. Live, 2026-11-11: 400%
 read back 20000/40000 and soldiers up to 39000 units away kept shadows.
+PO+ (US, EU, JP) wraps its own copy of the handler; the wrap installs at
+boot, but no PO+ stage has been checked for the effect. PO's shadow update
+is not in the PO+ engine, so PO+ has no shadow fade scaling.
 ## 13. Achievements
 
 Achievements and RetroAchievements support are planned for the next release.

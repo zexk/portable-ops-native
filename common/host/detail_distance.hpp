@@ -42,8 +42,11 @@ inline void register_lod(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
         // Foot shadows fade from 5000 to 10000 units from the camera (the two
         // floats are literals of their update, 0x14F70C, alone); the fade ends
         // at twice its start, so both scale together.
-        mem.store32(shadow_fade, std::bit_cast<std::uint32_t>(50.0f * static_cast<float>(percent)));
-        mem.store32(shadow_fade + 4u, std::bit_cast<std::uint32_t>(100.0f * static_cast<float>(percent)));
+        // PO+'s engine has no such update (shadow_fade 0): LOD records only.
+        if (shadow_fade) {
+            mem.store32(shadow_fade, std::bit_cast<std::uint32_t>(50.0f * static_cast<float>(percent)));
+            mem.store32(shadow_fade + 4u, std::bit_cast<std::uint32_t>(100.0f * static_cast<float>(percent)));
+        }
         if (percent == 100u) return;
         const float scale = static_cast<float>(percent * percent) / 10000.0f;  // distances are squared
         const std::uint32_t count = mem.load32(table);

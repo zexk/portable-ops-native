@@ -51,7 +51,8 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::crouchwalking::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u, 0x08804000u + 0x1EA680u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
-    mgs::boot_skip::install(runtime);
+    mgs::boot_skip::install(runtime, {0x08804000u + 0x3DF48u, 0x08804000u + 0x220CD8u, false, 0x120u, 232u,
+                                      0x2F058u, 0x2EF78u, 0x2EDDCu});
 }
 
 } // namespace
