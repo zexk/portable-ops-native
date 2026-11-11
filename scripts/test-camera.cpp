@@ -10,6 +10,7 @@ const portablekit::input::Bindings &portablekit::input::default_bindings() {
     static const Bindings bindings{};
     return bindings;
 }
+const char *portablekit::hle_extension::env(const char *) { return nullptr; }
 std::string portablekit::settings::game_default_name() { return {}; }
 portablekit::settings::Settings &portablekit::settings::current() {
     static Settings settings;
@@ -88,5 +89,23 @@ int main() {
     memory.store32(settings + 4u, 0u);
     flag(0x148u, true);
     assert(!mgs::first_person_swapped(memory, player)); // Special-state exception still wins.
+    // Radial aim: what the game's per-axis look makes of the rewritten bytes,
+    // (|byte| - 35)^2 a side, points along the stick and grows with its length.
+    const auto aimed = [&](int x, int y) {
+        memory.store8(player + 0x73eu, std::uint8_t(x));
+        memory.store8(player + 0x73fu, std::uint8_t(y));
+        mgs::radial_aim(memory, player + 0x73eu);
+        const auto rate = [&](std::uint32_t at) {
+            const int b = std::int8_t(memory.load8(at)), rest = std::max(std::abs(b) - 35, 0);
+            return b < 0 ? -rest * rest : rest * rest;
+        };
+        return std::pair{rate(player + 0x73eu), rate(player + 0x73fu)};
+    };
+    assert(aimed(20, 10) == std::pair(0, 0));       // inside the dead zone
+    assert(aimed(127, 0) == std::pair(92 * 92, 0)); // full push: the game's full rate
+    const auto shallow = aimed(100, 25);            // the game alone drops y (25 < 35)
+    assert(shallow.second > 0 && std::abs(shallow.first / double(shallow.second) - 4.0) < 0.5);
+    const auto back = aimed(-60, -60);
+    assert(back.first == back.second && back.first < 0);
     std::cout << "Camera follow and first-person stick selection checks passed\n";
 }

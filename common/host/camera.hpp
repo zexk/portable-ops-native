@@ -14,6 +14,7 @@
 // game's own analog camera does.
 
 #include "camera/camera_input.hpp"
+#include "portablekit/hle_extension.hpp"
 #include "profile.hpp"
 #include "settings/settings.hpp"
 
@@ -195,6 +196,28 @@ inline void swap_sticks(psprecomp::GuestMemory &memory, std::uint32_t player) {
     memory.store32(player + 0x744u, length);
 }
 
+// First-person look (0x10B4AC in PO) reads the stick one axis at a time:
+// nothing within 0x23 of centre, then the square of the rest as the turn
+// rate. A stick held off an axis therefore loses its smaller part and the
+// view snaps to eight directions. The bytes of the stick the look chooser
+// picks are rewritten so the game's own arithmetic turns along the stick's
+// true direction, at the rate its square gives the stick's length.
+inline void radial_aim(psprecomp::GuestMemory &memory, std::uint32_t bytes) {
+    const float x = static_cast<std::int8_t>(memory.load8(bytes)), y = static_cast<std::int8_t>(memory.load8(bytes + 1u));
+    // The nub's own dead zone (strength below 0x30 of 255), taken off the length.
+    constexpr float dead = 48.0f / 255.0f;
+    const float length = std::min(std::hypot(x, y) / 127.0f, 1.0f);
+    const float push = std::max(length - dead, 0.0f) / (1.0f - dead);
+    const auto byte = [&](float axis) {
+        if (push == 0.0f || axis == 0.0f) return std::uint8_t{0};
+        const float part = std::fabs(axis) / (length * 127.0f);  // this axis' share of the direction
+        const float value = 35.0f + 92.0f * push * std::sqrt(std::min(part, 1.0f));
+        return static_cast<std::uint8_t>(static_cast<std::int8_t>(std::copysign(std::round(value), axis)));
+    };
+    memory.store8(bytes, byte(x));
+    memory.store8(bytes + 1u, byte(y));
+}
+
 inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
     const std::uint32_t player = ctx.gpr[4];
@@ -202,6 +225,10 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
     const portablekit::settings::Settings &settings = portablekit::settings::current();
     if (settings.analog_camera) feed_camera_stick(static_cast<psprecomp::Runtime &>(rt), ctx, player);
     if (settings.swap_sticks_first_person && first_person_swapped(memory, player)) swap_sticks(memory, player);
+    // <prefix>_NO_RADIAL_AIM keeps the game's own first-person response.
+    static const bool radial = portablekit::hle_extension::env("NO_RADIAL_AIM") == nullptr;
+    if (radial && (action(memory, player, 0xbau) || action(memory, player, 7u)))
+        radial_aim(memory, player + (first_person_swapped(memory, player) ? 0x732u : 0x73eu));
 }
 
 inline void camera_frame(psprecomp::Runtime &) { portablekit::camera::discard(); }
