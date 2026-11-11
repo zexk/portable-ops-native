@@ -165,6 +165,22 @@ it once for all the stages that share it. Import stubs inside a module's code
 (`KCEJ_FS` has three) are dumped beside it as a `.stubs` file and kept out of
 its compiled code.
 
+## Research stage boot
+
+The research-only stage redirect can boot directly into boss arenas:
+
+```sh
+MGSPO_DATA_DIR=/path/to/copied-profile \
+    MGSPO_STAGE_REDIRECT=title=st11_boss out/po/bin/PortableOpsNative
+```
+
+`title=st20` reaches Gene. Both boots were checked in game on PO ULUS-10202
+1.02; Python needs no mission-flag patch. Use a copied profile: this starts
+with startup state rather than a campaign checkpoint. Long names use a
+bounded guest stack buffer, since the stage loader copies its name before
+returning. PO+ long-name boot is unverified. `scripts/test-stage-redirect.cpp`
+checks redirect selection and invalid names.
+
 ## Peace Walker backport policy
 
 PW backports are optional and off by default. Playing PO must not require

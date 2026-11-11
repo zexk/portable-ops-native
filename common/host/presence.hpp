@@ -16,6 +16,7 @@
 // st01t2 is the Communications Base on the map.
 
 #include "profile.hpp"
+#include "portablekit/hle_extension.hpp"
 #include "psprecomp/runtime.hpp"
 
 #include <array>
@@ -54,23 +55,54 @@ struct State {
 };
 inline State state;
 inline psprecomp::Runtime::RecompiledFunction original_request = nullptr;
+inline std::uint32_t request_address = 0;
+
+inline std::string_view redirect_target(std::string_view name, std::string_view rule) {
+    const auto equals = rule.find('=');
+    if (equals == std::string_view::npos || rule.substr(0, equals) != name) return {};
+    const auto target = rule.substr(equals + 1);
+    if (target.empty() || target.size() > 31 || target == name) return {};
+    for (const char c : target)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_')) return {};
+    return target;
+}
 
 inline void request(psprecomp::CorpusRuntime &runtime, psprecomp::AllegrexContext &ctx) {
     // Bounded: stage names are at most a dozen characters.
     auto &memory = static_cast<psprecomp::Runtime &>(runtime).memory();
     std::string name = memory.read_c_string(ctx.gpr[4], 32u);
     // <prefix>_STAGE_REDIRECT=from=to (research only): the request for stage
-    // `from` loads `to`, a name no longer than it, written over the game's.
+    // `from` loads `to`. Longer names use a temporary guest stack buffer:
+    // PO 1.02's 0x39A20 copies the name into its loader before returning.
     // The stage starts with whatever state the game has, not a mission's.
     if (const char *redirect = portablekit::env("STAGE_REDIRECT")) {
-        const std::string_view rule = redirect;
-        const auto equals = rule.find('=');
-        if (equals != std::string_view::npos && rule.substr(0, equals) == name &&
-            rule.size() - equals - 1u <= name.size()) {
-            name = rule.substr(equals + 1u);
-            for (std::size_t i = 0; i <= name.size(); ++i)
-                memory.store8(ctx.gpr[4] + static_cast<std::uint32_t>(i), static_cast<std::uint8_t>(name.c_str()[i]));
-            std::cout << "[presence] stage request redirected" << std::endl;
+        const auto target = redirect_target(name, redirect);
+        if (!target.empty()) {
+            if (target.size() > name.size()) {
+                const auto saved = ctx;
+                const auto stack = ctx.gpr[29] - 32u;
+                if (ctx.gpr[29] < 32u || !memory.contains(stack, 32u)) {
+                    std::cerr << "[presence] redirect has no guest stack space" << std::endl;
+                } else {
+                    for (std::size_t i = 0; i <= target.size(); ++i)
+                        memory.store8(stack + std::uint32_t(i), i == target.size() ? 0u : std::uint8_t(target[i]));
+                    ctx.gpr[29] = stack;
+                    std::cout << "[presence] stage request redirected to " << target << std::endl;
+                    portablekit::hle_extension::call_guest(ctx, request_address, {stack},
+                        [saved](auto &returned, std::uint32_t result) {
+                            returned = saved;
+                            returned.gpr[2] = result;
+                            returned.pc = returned.gpr[31];
+                        });
+                    return;
+                }
+            } else {
+                name = target;
+                for (std::size_t i = 0; i <= name.size(); ++i)
+                    memory.store8(ctx.gpr[4] + static_cast<std::uint32_t>(i), static_cast<std::uint8_t>(name.c_str()[i]));
+                std::cout << "[presence] stage request redirected" << std::endl;
+            }
         }
     }
     if (name != state.stage) {
@@ -88,6 +120,7 @@ inline void install(psprecomp::Runtime &runtime, std::uint32_t stage_request) {
     const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(stage_request);
     if (original == nullptr || original == &request) return;
     original_request = original;
+    request_address = stage_request;
     runtime.register_function(stage_request, &request, "mgs_stage_request");
 }
 
