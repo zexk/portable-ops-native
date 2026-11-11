@@ -105,6 +105,8 @@ void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::
                                   kBase + kRelease.pad, kBase + kRelease.globals,
                                   kBase + kRelease.set_action);
     mgs::install_camera_follow_in_module(runtime, base, code);
+    // The frame step sits 0x1FC before the globals in every release.
+    mgs::install_look_in_module(runtime, base, code, kBase + kRelease.globals - 0x1FCu);
 }
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {

@@ -14,6 +14,7 @@
 // game's own analog camera does.
 
 #include "camera/camera_input.hpp"
+#include "guest_wrap.hpp"
 #include "portablekit/hle_extension.hpp"
 #include "profile.hpp"
 #include "settings/settings.hpp"
@@ -206,9 +207,10 @@ inline void swap_sticks(psprecomp::GuestMemory &memory, std::uint32_t player) {
 // make the game's own arithmetic follow the stick: the bytes of the stick the
 // look chooser picks are rewritten so each axis' rate is its share of the
 // stick's direction, and each axis' accelerating turn is held to that share
-// of the cap, times how far the stick is pushed.
+// of the cap, times the square of how far the stick is pushed.
 inline float aim_share[2] = {1.0f, 1.0f};  // x, y: 1 leaves the game's cap alone
 inline std::uint32_t aim_player = 0u;      // whose stick the shares are from
+inline std::uint32_t aim_strength = 0u;    // that stick's strength word
 
 inline void radial_aim(psprecomp::GuestMemory &memory, std::uint32_t bytes) {
     const float axis[2] = {static_cast<float>(static_cast<std::int8_t>(memory.load8(bytes))),
@@ -218,10 +220,10 @@ inline void radial_aim(psprecomp::GuestMemory &memory, std::uint32_t bytes) {
     const float length = std::min(std::hypot(axis[0], axis[1]) / 127.0f, 1.0f);
     const float push = std::max(length - dead, 0.0f) / (1.0f - dead);
     for (unsigned i = 0; i < 2; ++i) {
-        // This axis' share of the direction, times the push.
-        const float part = push == 0.0f ? 0.0f : std::min(std::fabs(axis[i]) / std::hypot(axis[0], axis[1]), 1.0f) * push;
-        aim_share[i] = part;
-        const float value = part == 0.0f ? 0.0f : std::copysign(std::round(35.0f + 92.0f * std::sqrt(part * push)), axis[i]);
+        // This axis' share of the direction, and of the cap: the push squared, as the rate is.
+        const float part = push == 0.0f ? 0.0f : std::min(std::fabs(axis[i]) / std::hypot(axis[0], axis[1]), 1.0f);
+        aim_share[i] = part * push * push;
+        const float value = part == 0.0f ? 0.0f : std::copysign(std::round(35.0f + 92.0f * std::sqrt(part) * push), axis[i]);
         memory.store8(bytes + i, static_cast<std::uint8_t>(static_cast<std::int8_t>(value)));
     }
 }
@@ -245,6 +247,7 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
     if (radial) {
         radial_aim(memory, bytes);
         aim_player = player;
+        aim_strength = bytes - 2u;
     }
     if (trace && (raw[0] || raw[1] || raw[2] || raw[3]))
         std::cout << "[aim] move " << raw[0] << ' ' << raw[1] << " camera " << raw[2] << ' ' << raw[3] << " look@"
@@ -254,8 +257,12 @@ inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContex
 // The look component, entered with the player, its work and a phase. Before
 // its movement phase (0x20) the accelerating turn the last frame left is held
 // to each axis' share of the cap (step * 0x16C / 5, or 0x222 with flag 0xDD).
+// With a weapon aimed (flag 0x2E) the game runs that turn only while the look
+// stick's strength is 0xC9 or more, a step from about 90 a frame to 1000; the
+// strength is raised for the length of the call, so the turn grows with the
+// push all the way instead.
 struct LookState {
-    psprecomp::Runtime::RecompiledFunction component = nullptr;
+    GuestWrap component;
     std::uint32_t step = 0u;  // the engine's frame step
 };
 inline LookState look_state;
@@ -263,29 +270,45 @@ inline LookState look_state;
 inline void look_component(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
     const std::uint32_t player = ctx.gpr[4], work = ctx.gpr[5];
-    if (ctx.gpr[6] == 0x20u && memory.contains(player, 0xc00u) && memory.contains(work, 0xc0u)) {
-        const auto turn = [&](std::uint32_t at) { return static_cast<int>(static_cast<std::int16_t>(memory.load16(work + at))); };
-        static const bool trace = portablekit::hle_extension::env("TRACE_AIM") != nullptr;
-        if (trace && (turn(0x8cu) || turn(0x8eu) || turn(0x88u) || turn(0x8au)))
-            std::cout << "[look] rate " << turn(0x8eu) << ' ' << turn(0x8cu) << " accel " << turn(0x8au) << ' '
-                      << turn(0x88u) << " angle " << turn(0x72u) << ' ' << turn(0x70u) << " share " << aim_share[0] << ' '
-                      << aim_share[1] << (player == aim_player ? " own" : " other") << std::endl;
-        const int cap = static_cast<int>(memory.load32(look_state.step)) * (action(memory, player, 0xddu) ? 0x222 : 0x16c) / 5;
-        for (unsigned i = 0; i < 2; ++i) {
-            if (player != aim_player || aim_share[i] >= 1.0f) continue;
-            const std::uint32_t at = i == 0 ? 0x8au : 0x88u;  // x turns through +0x8A, y through +0x88
-            const int limit = static_cast<int>(static_cast<float>(cap) * aim_share[i]);
-            memory.store16(work + at, static_cast<std::uint16_t>(std::clamp(turn(at), -limit, limit)));
-        }
+    if (look_state.component.inner) {
+        look_state.component.around(rt, ctx, {});
+        return;
     }
-    look_state.component(rt, ctx);
+    if (ctx.gpr[6] != 0x20u || !memory.contains(player, 0xc00u) || !memory.contains(work, 0xc0u)) {
+        look_state.component.original(rt, ctx);
+        return;
+    }
+    const auto turn = [&](std::uint32_t at) { return static_cast<int>(static_cast<std::int16_t>(memory.load16(work + at))); };
+    static const bool trace = portablekit::hle_extension::env("TRACE_AIM") != nullptr;
+    if (trace && (turn(0x8cu) || turn(0x8eu) || turn(0x88u) || turn(0x8au)))
+        std::cout << "[look] rate " << turn(0x8eu) << ' ' << turn(0x8cu) << " accel " << turn(0x8au) << ' '
+                  << turn(0x88u) << " angle " << turn(0x72u) << ' ' << turn(0x70u) << " share " << aim_share[0] << ' '
+                  << aim_share[1] << (player == aim_player ? " own" : " other") << std::endl;
+    if (player != aim_player || (aim_share[0] >= 1.0f && aim_share[1] >= 1.0f)) {
+        look_state.component.original(rt, ctx);
+        return;
+    }
+    const int cap = static_cast<int>(memory.load32(look_state.step)) * (action(memory, player, 0xddu) ? 0x222 : 0x16c) / 5;
+    for (unsigned i = 0; i < 2; ++i) {
+        const std::uint32_t at = i == 0 ? 0x8au : 0x88u;  // x turns through +0x8A, y through +0x88
+        const int limit = static_cast<int>(static_cast<float>(cap) * std::min(aim_share[i], 1.0f));
+        memory.store16(work + at, static_cast<std::uint16_t>(std::clamp(turn(at), -limit, limit)));
+    }
+    const std::uint32_t strength = aim_strength;
+    const std::uint16_t held = memory.load16(strength);
+    if (held == 0u || held >= 0xc9u) {
+        look_state.component.original(rt, ctx);
+        return;
+    }
+    memory.store16(strength, 0xc9u);
+    look_state.component.around(rt, ctx, [strength, held](psprecomp::Runtime &runtime, std::uint32_t) {
+        if (runtime.memory().load16(strength) == 0xc9u) runtime.memory().store16(strength, held);
+    });
 }
 
 inline void install_look(psprecomp::Runtime &runtime, std::uint32_t component, std::uint32_t step) {
-    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(component);
-    if (original == nullptr || original == &look_component) return;
-    look_state = {original, step};
-    runtime.register_function(component, &look_component, "mgs_look_component");
+    if (!look_state.component.install(runtime, component, &look_component, "mgs_look_component")) return;
+    look_state.step = step;
     std::cout << "[look] first-person turn follows the stick at 0x" << std::hex << component << std::dec << std::endl;
 }
 
@@ -400,6 +423,18 @@ inline void install_camera_follow_in_module(psprecomp::Runtime &runtime, std::ui
     };
     if (const auto found = find_shape(code, kCameraUpdateShape, relocated_out))
         install_camera_follow(runtime, base + *found);
+}
+
+// The look component's first twelve instructions, branch offsets removed. PO+
+// keeps it in each stage module, the same in every release.
+inline constexpr std::uint32_t kLookComponentShape[] = {0x27bdfff0u, 0x24020020u, 0xafb20008u, 0x00009021u,
+                                                        0xafb10004u, 0x00a08821u, 0xafb00000u, 0x00808021u,
+                                                        0x10c20000u, 0xafbf000cu, 0x28c20021u, 0x10400000u};
+
+inline void install_look_in_module(psprecomp::Runtime &runtime, std::uint32_t base,
+                                   std::span<const std::uint8_t> code, std::uint32_t step) {
+    const auto branches_out = [](std::uint32_t word) { return word >> 26u == 0x04u ? word & 0xffff0000u : word; };
+    if (const auto found = find_shape(code, kLookComponentShape, branches_out)) install_look(runtime, base + *found, step);
 }
 
 inline constexpr portablekit::CameraDriver kCameraDriver{
