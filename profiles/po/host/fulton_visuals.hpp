@@ -147,6 +147,9 @@ void restore_facing(Memory &memory) {
 inline psprecomp::Runtime::RecompiledFunction original_motion = nullptr;
 inline psprecomp::Runtime::RecompiledFunction original_reset = nullptr;
 inline bool selecting_motion = false;
+// Another feature's override of Snake's motion (crouchwalking's loop) steps
+// back before Fulton takes the motion, so the hand-back returns the game's own.
+inline std::function<void(psprecomp::GuestMemory &)> release_player_motion;
 
 // The soldier's motion block is work +0x118 (PO ULUS-10202 1.02). A downed
 // soldier plays enedam (0x141D5E) there, not enemy (0x88A21F).
@@ -406,6 +409,7 @@ inline void begin(Runtime &runtime, Context &ctx, std::uint32_t player, std::uin
     const auto saved = ctx;
     auto &memory = runtime.memory();
     const auto soldier = soldier_motion(memory, enemy);
+    if (release_player_motion) release_player_motion(memory);
     if (!original_motion || !state.snake.capture(memory, memory.load32(player + 0x1e8u)) ||
         !state.soldier.capture(memory, soldier)) {
         std::cerr << "[fulton] player or soldier motion not found" << std::endl;

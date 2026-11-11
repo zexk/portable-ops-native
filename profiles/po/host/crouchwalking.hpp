@@ -4,6 +4,7 @@
 // decision turns movement into a prone transition. Keep that decision's
 // other checks, but let PW's two loops supply the movement displacement.
 #include "fulton_convert.hpp"
+#include "fulton_visuals.hpp"
 #include "guest_wrap.hpp"
 #include "install/user_data.hpp"
 
@@ -173,11 +174,15 @@ inline void prepare(Runtime &runtime, Context &ctx, Resume next) {
 inline void start(Context &ctx, std::uint32_t block, int clip) {
     // Match component 0x1676C: start the clip, then snapshot the previous
     // evaluated pose and blend it with 0x7F69C. The start offset is not a blend.
+    // Not the game's own request: Fulton must not replay it at its hand-back,
+    // which would put the walking loop back on with nothing to stop it.
+    fulton_visuals::selecting_motion = true;
     portablekit::hle_extension::call_guest(ctx, engine + 0x7f264u,
         {block, 0u, std::uint32_t(clip), 0u, 0x7ffffu, 0u},
         [block](auto &started, std::uint32_t) {
             portablekit::hle_extension::call_guest(started, engine + 0x7f69cu,
-                {block, blend_ticks, 0x7ffffu, 0u, 0u}, [](auto &, std::uint32_t) {});
+                {block, blend_ticks, 0x7ffffu, 0u, 0u},
+                [](auto &, std::uint32_t) { fulton_visuals::selecting_motion = false; });
         });
 }
 
@@ -229,6 +234,8 @@ inline void crouch_decision(psprecomp::CorpusRuntime &corpus, Context &ctx) {
                                 if (was_ours && staying && old_clip >= 0) start(after, motion, old_clip);
                                 return;
                             }
+                            // Fulton has the motion; its hand-back returns it.
+                            if (fulton_visuals::holds(memory.load32(player + 0x1e8u))) return;
                             prepare(runtime, after, [&runtime, player, yaw](auto &ready) {
                                 if (!resource) return;
                                 auto &memory = runtime.memory();
@@ -289,6 +296,7 @@ inline void install(Runtime &runtime) {
         enabled = false; status = "Crouchwalk hooks unavailable"; return;
     }
     runtime.register_function(decision, &crouch_decision, "po_crouchwalk_decision");
+    fulton_visuals::release_player_motion = [](psprecomp::GuestMemory &memory) { restore(memory); };
     std::cout << "[crouchwalk] enabled" << std::endl;
 }
 } // namespace mgs::crouchwalking
