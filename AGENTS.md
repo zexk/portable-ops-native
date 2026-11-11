@@ -45,5 +45,5 @@ copies its confirmed grunt and voice unchanged alongside sequenced foleys,
 and decodes its ATRAC3plus balloon to the same 12 kHz ADPCM cue (PO plays
 one ATRAC3plus effect at a time, so other speech cut the balloon off).
 MC's balloon uses 12 kHz to fit PO's existing 32 KiB bank. Donors load from memory in
-every stage; no stage file is replaced. Both imports pass offline checks;
-the complete MC bundle and its Game-tab import still need live validation.
+every stage; no stage file is replaced. Both imports pass offline checks,
+and the user reports the Game-tab import done as of 2026-11-11.
