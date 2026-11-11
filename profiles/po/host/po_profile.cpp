@@ -103,8 +103,8 @@ const GameProfile &game() {
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
             },
-        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::fulton_settings::draw(); },
-        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::fulton_settings::reset(); },
+        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::fulton_settings::draw(); },
+        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::fulton_settings::reset(); },
         .game_settings_screen = &mgs::fulton_settings::screen,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,

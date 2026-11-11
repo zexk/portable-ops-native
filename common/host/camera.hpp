@@ -13,6 +13,7 @@
 // conditions the game would clear it. The camera then behaves exactly as the
 // game's own analog camera does.
 
+#include "analog_stalk.hpp"
 #include "camera/camera_input.hpp"
 #include "guest_wrap.hpp"
 #include "portablekit/hle_extension.hpp"
@@ -231,7 +232,9 @@ inline void radial_aim(psprecomp::GuestMemory &memory, std::uint32_t bytes) {
 inline void player_input(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
     auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
     const std::uint32_t player = ctx.gpr[4];
+    analog_stalk::before(memory, player);
     camera_state.player_input(rt, ctx);
+    analog_stalk::after(memory, player);
     const portablekit::settings::Settings &settings = portablekit::settings::current();
     if (settings.analog_camera) feed_camera_stick(static_cast<psprecomp::Runtime &>(rt), ctx, player);
     if (settings.swap_sticks_first_person && first_person_swapped(memory, player)) swap_sticks(memory, player);
@@ -321,6 +324,7 @@ inline void install_camera(psprecomp::Runtime &runtime, CameraAddresses addresse
     if (original == nullptr || original == &player_input) return;
     camera_state.addresses = addresses;
     camera_state.player_input = original;
+    analog_stalk::load();
     runtime.register_function(addresses.player_input, &player_input, "mgs_player_input");
     std::cout << "[camera-stick] second stick feeds the camera stick from 0x" << std::hex << addresses.player_input
               << std::dec << std::endl;

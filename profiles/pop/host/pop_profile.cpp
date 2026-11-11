@@ -160,8 +160,8 @@ const GameProfile &game() {
 
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
-        .draw_game_settings = &mgs::boot_skip::draw,
-        .reset_game_settings = &mgs::boot_skip::reset,
+        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); },
+        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); },
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .adjustable_fov = true,
