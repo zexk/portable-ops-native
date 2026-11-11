@@ -14,6 +14,7 @@
 #include "presence.hpp"
 #include "profile.hpp"
 #include "savempo.hpp"
+#include "settings_defaults.hpp"
 #include "umd_key_table.hpp"
 #include "widescreen.hpp"
 
@@ -158,6 +159,7 @@ const GameProfile &game() {
         .adhoc_menu = false,
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
+        .settings_defaults = &mgs::settings_defaults,
 
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
