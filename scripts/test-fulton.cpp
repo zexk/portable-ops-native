@@ -283,13 +283,15 @@ int main(int argc, char **argv) {
     bool returned = false;
     auto lifetime = std::make_shared<int>(0);
     mgs::fulton_visuals::hand_back(memory, context, motion, [&, lifetime](auto &) { returned = true; });
-    for (unsigned i = 0; i < 2; ++i) {
+    // Full-body request, its 35-tick pose blend, then the upper-body release.
+    const std::array<std::uint32_t, 3> handed{0x7f264u, 0x7f69cu, 0x7f634u};
+    const std::array<std::vector<std::uint32_t>, 3> handed_arguments{
+        {{block, 0, 7, 0, 0x7ffff, 0}, {block, 35, 0x7ffff, 0, 0}, {block, 1}}};
+    for (unsigned i = 0; i < handed.size(); ++i) {
         assert(guest_calls.size() == 1 && !returned);
         auto call = std::move(guest_calls.back());
         guest_calls.clear();
-        assert(call.function == engine + (i == 0 ? 0x7f264u : 0x7f634u));
-        assert(call.arguments == (i == 0 ? std::vector<std::uint32_t>{block, 0, 7, 0, 0x7ffff, 0}
-                                        : std::vector<std::uint32_t>{block, 1}));
+        assert(call.function == engine + handed[i] && call.arguments == handed_arguments[i]);
         call.returned(context, 0);
     }
     assert(returned && !motion.active && !mgs::fulton_visuals::selecting_motion);

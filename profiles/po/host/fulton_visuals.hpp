@@ -292,12 +292,20 @@ inline void dispose(Runtime &runtime, Context &ctx, bool complete, Resume next) 
 // release the upper-body layer so the clip owns the arms too: with a weapon
 // out that layer holds the aim pose over any full-body clip. The hand-back
 // replays the engine's last own request for it. Then next.
+// Every full-body start, ours or a hand-back, is followed by the engine's
+// own pose blend (0x7F69C, as component 0x1676C does): 0x7F264 alone begins
+// at the clip's first pose, which snapped. 35 ticks is PO's default.
+inline std::vector<std::uint32_t> blend(std::uint32_t motion) { return {motion, 35u, 0x7ffffu, 0u, 0u}; }
 inline void play(Context &ctx, std::uint32_t motion, std::uint32_t clip, std::function<void(Context &)> next) {
     selecting_motion = true;
     portablekit::hle_extension::call_guest(ctx, base + 0x7f264u, {motion, 0, clip, 0, 0x7ffffu, 0},
         [motion, next](auto &context, std::uint32_t) {
-            portablekit::hle_extension::call_guest(context, base + 0x7f634u, {motion, 1u},
-                [next](auto &released, std::uint32_t) { selecting_motion = false; next(released); });
+            const auto arguments = blend(motion);
+            portablekit::hle_extension::call_guest(context, base + 0x7f69cu, std::span<const std::uint32_t>(arguments),
+                [motion, next](auto &blended, std::uint32_t) {
+                    portablekit::hle_extension::call_guest(blended, base + 0x7f634u, {motion, 1u},
+                        [next](auto &released, std::uint32_t) { selecting_motion = false; next(released); });
+                });
         });
 }
 
@@ -313,9 +321,10 @@ void hand_back(Memory &memory, Context &ctx, Override &ov, std::function<void(Co
     if (was) {
         const auto &known = learned[ov.motion];
         for (std::uint32_t layer = 0; layer < 2; ++layer) {
-            if (const auto &r = known[layer])
+            if (const auto &r = known[layer]) {
                 calls.push_back({0x7f264u, {ov.motion, (*r)[0], (*r)[1], (*r)[2], (*r)[3], (*r)[4]}});
-            else if (layer == 1)
+                if (layer == 0) calls.push_back({0x7f69cu, blend(ov.motion)});
+            } else if (layer == 1)
                 calls.push_back({0x7f634u, {ov.motion, 1u}});
             if (trace_motion)
                 std::cout << std::hex << "[fulton] hand-back " << ov.motion << " layer " << layer << " clip "
