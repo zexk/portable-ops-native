@@ -46,7 +46,7 @@ Press **Esc** or **L3 + R3** to open the settings menu. Bindings are in
 - **F3**: toggle the performance overlay
 - **F12**: save a screenshot in the user-data folder's `screenshots/`
 
-PO also has **Game > Startup** toggles for skipping the logos and opening movie.
+Both games have **Game > Startup** toggles for skipping the logos and opening movie.
 
 ## Peace Walker features
 
