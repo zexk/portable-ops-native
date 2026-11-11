@@ -508,7 +508,8 @@ PO ULUS-10202 1.02, 2026-11-10. The previous hook at the swing helper
 (`0x10E1DC`, relative to the image) was bypassed by generated same-unit
 calls. The hook now wraps the camera actor's update (`0x10D304`), setting
 the actor's follow rule at `+0x68` to zero while the update runs when
-Controls > Camera follows behind is off. It restores the stage's rule
+Controls > Disable camera follow is on (`input.camera_follow=0`; the row was
+"Camera follows behind" until 2026-11-11). It restores the stage's rule
 afterwards; manual camera input and the recentre button still run through
 the game's camera code.
 
