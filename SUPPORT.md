@@ -37,6 +37,22 @@ individual DLL downloads. If files are missing, re-extract the whole archive.
 On Linux, check the package's recorded glibc requirement. Never mix modules
 or DLLs from different editions or releases.
 
+## Tearing on Linux
+
+Horizontal tearing while the camera turns, most visible on poles and fence
+posts and unaffected by the Vsync setting, comes from the X server and not
+from the game. On X11 with more than one monitor a fullscreen window may be
+copied to the screen and not page-flipped. Enable the driver's tear-free
+option for the output and try again:
+
+```sh
+xrandr --prop | grep -E ' connected|TearFree'
+xrandr --output <output> --set TearFree on
+```
+
+Seen and resolved this way on an AMD GPU with the `amdgpu` X driver and two
+monitors (144 Hz and 60 Hz), 2026-11-11. Other drivers are unverified.
+
 ## Reporting an issue
 
 Use the repository's bug-report template once its public location is announced.
