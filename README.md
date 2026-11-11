@@ -11,7 +11,7 @@ Work in progress. Public packages are not available yet.
 
 - Right-stick camera, keyboard and controller bindings
 - Widescreen, resolution scaling, anti-aliasing and anisotropic filtering
-- Adjustable field of view and camera speed; draw distance in PO
+- Adjustable field of view, detail distance and camera speed
 - Frame interpolation with latency prediction
 - PPSSPP-format texture packs
 - Optional Peace Walker Fulton recovery and crouchwalking in PO
@@ -46,7 +46,9 @@ Press **Esc** or **L3 + R3** to open the settings menu. Bindings are in
 - **F3**: toggle the performance overlay
 - **F12**: save a screenshot in the user-data folder's `screenshots/`
 
-Both games have **Game > Startup** toggles for skipping the logos and opening movie.
+Both games have **Game > Startup** toggles for skipping the logos and opening
+movie. **Game > Controls > Analog stalking** (off by default) stalks while the
+movement stick is tilted only slightly; it is checked in PO, not yet in PO+.
 
 ## Peace Walker features
 
@@ -77,10 +79,7 @@ Protocol: [server/PROTOCOL.md](server/PROTOCOL.md).
 
 ## Known issues
 
-- Python's gas can trigger false frame-interpolation cuts, making the scene
-  appear to drop to the game's 20 fps despite the higher presented frame rate.
-- Peace Walker features and multiplayer are experimental. Full Fulton import
-  validation through the Game tab is still pending.
+- Peace Walker features and multiplayer are experimental.
 - Windows builds have been tested under Wine; native Windows acceptance and
   full campaign testing are pending.
 
