@@ -24,7 +24,10 @@ User data normally lives at:
 | PO+ | `~/.local/share/PortableOpsPlusNative/ULUS10290/` | `%APPDATA%\PortableOpsPlusNative\ULUS10290\` |
 
 Linux respects `XDG_DATA_HOME`. Custom `MGSPO_DATA_DIR` or `MGSPOP_DATA_DIR`
-settings override these locations. Saves live under `ms0/PSP/SAVEDATA/`.
+settings override these locations. Saves live under `ms0/PSP/SAVEDATA/`. The
+save each slot held before its last write is kept in
+`ms0/PSP/SAVEDATA/.previous/` and loaded instead when the newer one turns out
+broken, for example after a crash while saving.
 Back up the user-data folder before testing experimental builds. To change
 versions, extract into a separate program folder and leave user data alone.
 Do not delete user data as a troubleshooting step.
@@ -59,8 +62,12 @@ Use the repository's bug-report template once its public location is announced.
 Include package version/checksum, edition, OS, GPU/driver, reproducible steps,
 and whether the failure happens with an existing or fresh installation.
 
-Check the build revision with `--version`. For startup diagnostics, run from a
-terminal and save standard output/error:
+Check the build revision with `--version`. Every run writes what it prints to
+`PortableOpsNative.log` in the user-data folder (**System > Open the data
+folder**) and keeps the run before as `PortableOpsNative-previous.log`. Send
+both soon after a problem: each start replaces them. Driver and library
+messages appear only in a terminal; to capture those too, run from one and
+save standard output/error:
 
 ```sh
 ./PortableOpsNative --version
