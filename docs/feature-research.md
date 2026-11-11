@@ -338,10 +338,33 @@ buffer region and rejected every pair at first. Position and vertex
 colour blend when every vertex keeps its UVs and moves at most 48 pixels.
 In a mission trace about 94 percent of roughly 51 sprite draw calls a
 frame paired, and up to 8 moved per present. The user confirmed the
-weapon wheel's fade as better. Blending frame pairs without 3D was tried
-and removed: a replay draws only draw calls into the displayed
-framebuffer, and the splash screens came out dark and flickering, so
-full-screen 2D screens stay at 30. No pixel comparison was run.
+weapon wheel's fade as better.
+
+Blending frame pairs without 3D was tried, removed, and restored on
+2026-11-11 (PortableKit `f8ef9a4`). The dark frames came from the opening
+movie: its picture is copied from memory, so no draw call makes it and a
+replay drew black. A frame given its picture that way is no longer
+recorded, and a pair without 3D blends only when both frames cleared their
+framebuffer before drawing anything else
+(`MGSPO_INTERPOLATION_NO_THROUGH_ALONE` turns it off). `MGSPO_CHECK_REPLAY`
+found the splash and title screens replayed pixel-exact. Sprites also pair
+by texture coordinates since `3ef7ec8`, so a glyph more in a line leaves
+the other glyphs paired. In a live menu tour the same day, 99.7 percent
+of 39,977 presents blended with no cuts; on average 0.4 sprite draw calls
+a present had no partner (up to 20 in one second) and almost none were
+held by the 48-pixel limit. The user saw the menus as smooth.
+
+Two faults reported while turning in `st01` the same day were not
+through-mode faults. Scenery coming into view at the screen edge appeared
+a game frame late: a draw only the newer frame has was judged by its
+origin, and meshes of one piece of scenery share a world matrix. It is
+judged by the middle of its vertices since `05e63ea`
+(`MGSPO_INTERPOLATION_BRING_ORIGIN` restores the origin); the user
+confirmed the fix. Tearing on poles came from the X server, not the game:
+it stopped with the `amdgpu` driver's `TearFree` option on (see
+[SUPPORT.md](../SUPPORT.md)). Dust particles are quads drawn from a
+per-frame buffer like Python's gas, never pair, and step at the game's
+rate; the user judged them fine after the fixes above.
 
 ## 15. Interpolation latency
 
