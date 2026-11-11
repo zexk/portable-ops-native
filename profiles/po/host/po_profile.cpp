@@ -6,6 +6,7 @@
 
 #include "camera.hpp"
 #include "boot_skip.hpp"
+#include "crouchwalking.hpp"
 #include "detail_distance.hpp"
 #include "fulton.hpp"
 #include "fulton_settings.hpp"
@@ -47,6 +48,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera_trace(runtime, kCameraUpdate);
     mgs::install_widescreen(runtime, kWidescreen);
     mgs::fulton::install(runtime);
+    mgs::crouchwalking::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u, 0x08804000u + 0x1EA680u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
     mgs::boot_skip::install(runtime);
@@ -96,6 +98,7 @@ const GameProfile &game() {
             +[](psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                 std::span<const std::uint8_t> code) {
                 mgs::fulton::module_ready(runtime, name, base, code);
+                mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
             },
         .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::fulton_settings::draw(); },

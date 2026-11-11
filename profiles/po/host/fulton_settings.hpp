@@ -2,6 +2,7 @@
 
 #include "fulton_assets.hpp"
 #include "fulton_convert.hpp"
+#include "crouchwalking.hpp"
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
 #include "ui/file_browser.hpp"
@@ -27,6 +28,7 @@ inline void save(bool selected) {
 
 inline void reset() {
     if (!portablekit::hle_extension::env("FULTON")) save(false);
+    crouchwalking::save(false);
 }
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
@@ -34,6 +36,7 @@ inline std::unique_ptr<portablekit::ui::FileBrowser> browser;
 // A running import: reading a disc image takes seconds, so it works beside
 // the menu and reports its outcome as the row's note. Empty on success.
 inline std::future<std::string> importing;
+inline bool importing_crouchwalk = false;
 #endif
 
 // Accept either PW edition, or an already converted bundle. Sources remain
@@ -64,7 +67,8 @@ inline bool screen([[maybe_unused]] bool back) {
     if (!browser) return false;
     const auto result = browser->frame(back);
     if (result == FileBrowser::Result::Chosen)
-        importing = std::async(std::launch::async, import, browser->chosen());
+        importing = std::async(std::launch::async,
+                               importing_crouchwalk ? crouchwalking::import : import, browser->chosen());
     if (result != FileBrowser::Result::Browsing) browser.reset();
     return true;
 #else
@@ -80,9 +84,17 @@ inline void draw() {
     if (busy && importing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const auto failure = importing.get();
         // The running game keeps its startup snapshot; only the menu learns.
-        if (failure.empty()) fulton_assets::available = true;
-        fulton_assets::status = failure.empty() ? "Assets imported" : "Import failed: " + failure;
-    } else if (busy) fulton_assets::status = "Importing…";
+        if (importing_crouchwalk) {
+            crouchwalking::refresh();
+            crouchwalking::status = failure.empty() ? "Assets imported" : "Import failed: " + failure;
+        } else {
+            if (failure.empty()) fulton_assets::available = true;
+            fulton_assets::status = failure.empty() ? "Assets imported" : "Import failed: " + failure;
+        }
+    } else if (busy) {
+        if (importing_crouchwalk) crouchwalking::status = "Importing…";
+        else fulton_assets::status = "Importing…";
+    }
     section("Peace Walker");
     RowOptions options;
     options.disabled = override || (!fulton_assets::available && !fulton_assets::selected);
@@ -98,6 +110,7 @@ inline void draw() {
                                "the game's own data; the source is not changed or needed afterwards. Importing does not "
                                "turn Fulton on."})) {
         FileBrowser::Options browse;
+        importing_crouchwalk = false;
         browse.empty_note = "No folders or disc images here.";
         browse.choose_folder = "Import from this folder";
         browse.choose_on_open = [](const std::filesystem::path &folder) {
@@ -108,6 +121,28 @@ inline void draw() {
     }
     if (!override && fulton_assets::selected != fulton_assets::enabled())
         info_row("Fulton", fulton_assets::available ? "Restart to apply" : "Inactive: assets required");
+    RowOptions crouch;
+    crouch.disabled = !crouchwalking::available && !crouchwalking::selected;
+    crouch.note = crouchwalking::status;
+    crouch.description = "Move while crouched; hold Triangle for slower stalking. Experimental. "
+                         "Applies after restarting the game.";
+    if (toggle_row("Crouchwalking (experimental)", crouchwalking::selected, crouch))
+        crouchwalking::save(!crouchwalking::selected);
+    if (!crouchwalking::available && !importing.valid() &&
+        button_row("Import crouchwalk assets…", {false, {},
+                   "Choose your Peace Walker PSP disc image (.iso), Master Collection installation folder, "
+                   "or converted crouchwalk folder. Importing leaves crouchwalking off."})) {
+        importing_crouchwalk = true;
+        FileBrowser::Options browse;
+        browse.empty_note = "No folders or disc images here.";
+        browse.choose_folder = "Import from this folder";
+        browse.choose_on_open = [](const std::filesystem::path &folder) {
+            return std::filesystem::is_regular_file(folder / "crouchwalk.mtar");
+        };
+        browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
+    }
+    if (crouchwalking::selected != crouchwalking::enabled)
+        info_row("Crouchwalking", crouchwalking::available ? "Restart to apply" : "Inactive: assets required");
 #endif
 }
 } // namespace mgs::fulton_settings

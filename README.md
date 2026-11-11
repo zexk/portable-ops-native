@@ -258,6 +258,26 @@ profiles check both import paths, default-off behavior, selection persistence
 and rejection without replacing valid assets. The complete MC bundle and
 its Game-tab browser flow still need live validation.
 
+## Crouchwalking experiment (PO only)
+
+Game > Peace Walker has a separate **Crouchwalking (experimental)** toggle,
+off by default. Import its assets from your PW PSP ISO, Master Collection
+installation folder, or a folder containing converted `crouchwalk.mtar`.
+Importing does not enable it. Converted data stays in the port's user data;
+the donor is read-only and is not needed afterwards. Restart to apply a
+selection change. Missing or invalid converted data leaves the feature
+inactive and normal PO playable.
+
+While crouched, movement selects PW's normal crouchwalk loop. Hold Triangle
+for the slower loop; releasing movement returns to crouch idle. The
+prototype keeps PO's crouch state and uses its existing motion-displacement
+and collision path. The user confirmed basic locomotion in `st01t2` on
+ULUS-10202 1.02. Both source imports and asset/setting checks pass; native
+35-tick entry, gait-switch and idle-return blending was also confirmed by
+the user. Runtime behavior remains experimental. Aiming, weapon overlays, combat
+interruptions, slopes, mission retry and online play are not validated.
+See the [research notes](../docs/portable-ops/crouchwalking.md).
+
 ## Optional Fulton prototype (PO only)
 
 Set `MGSPO_FULTON=1` before launching Portable Ops Native. Press **Triangle**
