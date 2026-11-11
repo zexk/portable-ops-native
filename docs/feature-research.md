@@ -434,6 +434,17 @@ a frame). Carrying is now capped at one vblank (`kMaxCarryUs`, PortableKit
 at 0%, and the user reports no judder. The table above predates the cap.
 Physical button-to-screen latency is still unmeasured.
 
+Until PortableKit `a29ea41` (2026-11-11) a carried present drew the
+interface's through-mode sprites as the newer frame drew them, so at 144 Hz
+with the full lead the interface held still for the carried half of each
+frame and moved in the other. They are now carried on like the rest, with
+vertex colours clamped. In bounded logo and title runs, through-mode draw
+calls moved per blended present went from 0.5 to 1.0, and the replay and
+carry checks stayed at 0 differing pixels.
+`MGSPO_INTERPOLATION_NO_THROUGH_CARRY` holds the sprites again for
+comparison. A menu cursor step now overshoots by up to half a step on
+carried presents; not yet looked at in a menu with a moving cursor.
+
 **A frame held by the game itself** (2026-11-10, ULUS-10202 1.02,
 `MGSPO_TRACE_PACING`). Apart from interpolation, the game's main loop does
 all its work in the first 2 ms after a vblank: flip to the buffer drawn
