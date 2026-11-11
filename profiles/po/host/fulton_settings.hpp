@@ -5,6 +5,7 @@
 #include "crouchwalking.hpp"
 
 #if defined(PORTABLEKIT_HAS_RENDERER)
+#include "install/installer.hpp"
 #include "ui/file_browser.hpp"
 #include "ui/widgets.hpp"
 #include <chrono>
@@ -119,8 +120,6 @@ inline void draw() {
         };
         browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
     }
-    if (!override && fulton_assets::selected != fulton_assets::enabled())
-        info_row("Fulton", fulton_assets::available ? "Restart to apply" : "Inactive: assets required");
     RowOptions crouch;
     crouch.disabled = !crouchwalking::available && !crouchwalking::selected;
     crouch.note = crouchwalking::status;
@@ -141,8 +140,17 @@ inline void draw() {
         };
         browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
     }
-    if (crouchwalking::selected != crouchwalking::enabled)
-        info_row("Crouchwalking", crouchwalking::available ? "Restart to apply" : "Inactive: assets required");
+    // The game takes both at start, so one restart applies either. Without
+    // assets there is nothing to apply; the feature's note says what is missing.
+    const bool fulton_waits =
+        !override && fulton_assets::available && fulton_assets::selected != fulton_assets::enabled();
+    const bool crouch_waits = crouchwalking::available && crouchwalking::selected != crouchwalking::enabled;
+    if ((fulton_waits || crouch_waits) &&
+        button_row("Restart to apply",
+                   {false, {}, "Closes the game and starts it again at the title screen. Progress since your last "
+                               "save is lost."},
+                   colors::kAccentBright))
+        portablekit::install::request_restart_on_exit();
 #endif
 }
 } // namespace mgs::fulton_settings

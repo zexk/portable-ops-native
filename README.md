@@ -66,9 +66,10 @@ PO only. Both are off by default, under **Game > Peace Walker**.
   gait; release movement to return to crouch idle.
 
 Use the feature's import action to select a Peace Walker PSP ISO or Master
-Collection installation folder. Then enable it and restart the game. Importing
-assets leaves the feature off. The source is read-only and is not needed after
-import. Converted asset folders are accepted too.
+Collection installation folder. Then enable it and choose **Restart to apply**,
+which starts the game again at the title screen. Importing assets leaves the
+feature off. The source is read-only and is not needed after import. Converted
+asset folders are accepted too.
 
 ## Online play
 
