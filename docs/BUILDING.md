@@ -77,6 +77,14 @@ and `add-modules.py` compiles only that (`coverage=startup`). In every PO NA
 of each startup image was half of the module build. Other images get full
 coverage.
 
+Module units compile at `-O1` (`PSPRECOMP_OVERLAY_OPT_LEVEL`; PortableKit's
+default is `-Os`). With GCC 16.2, 12 of 13 sampled PO and PO+ units compiled
+in 47 to 57 percent of the `-Os` time with 10 to 34 percent smaller objects;
+the largest PO+ unit took as long. Idle in st01t2 after loading a save, guest
+time was 10.25 ms per game frame at `-O1` and 10.50 at `-Os`, at 20 game
+frames per second in both, within the runs' spread. A build directory keeps
+its cached level until reconfigured with `-U PSPRECOMP_OVERLAY_OPT_LEVEL`.
+
 `scripts/stage-sweep.py` boots every stage on the disc headless, with the
 interpreter off, and reports any stage that stops for missing code:
 

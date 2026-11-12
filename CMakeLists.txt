@@ -9,6 +9,10 @@ project(PortableOpsNative VERSION 0.1.0 LANGUAGES C CXX)
 # pop-eu and pop-jp are Portable Ops+'s European and Japanese releases.
 set(MGS_EDITION "po" CACHE STRING "Edition to build: po (Portable Ops), pop, pop-eu or pop-jp (Portable Ops+)")
 set_property(CACHE MGS_EDITION PROPERTY STRINGS po pop pop-eu pop-jp)
+# Stage and module code at -O1 rather than PortableKit's -Os: with GCC 16.2 it
+# compiles in about half the time with smaller objects, and guest time in a
+# PO stage was unchanged (docs/BUILDING.md).
+set(PSPRECOMP_OVERLAY_OPT_LEVEL "1" CACHE STRING "Optimization level for generated module units (0, 1, 2, 3 or s)")
 
 add_subdirectory(portablekit)
 # PortableKit's own setting stays in its directory; the packagers read the
