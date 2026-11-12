@@ -90,6 +90,16 @@ constexpr SaveFolder kSaveFolders[] = {
     {kRelease.save_slots[2], "Save 3", true},
 };
 
+// A new game offers to import units from Portable Ops' save on the same memory
+// stick (game ULUS10202, file 00000000.000); Portable Ops Native, NA 1.02 only,
+// keeps it in its own data folder.
+#if defined(MGS_REGION_EU) || defined(MGS_REGION_JP)
+constexpr std::span<const OtherGameSaves> kPortableOpsSaves{};
+#else
+constexpr OtherGameSaves kPortableOpsSaveFolders[] = {{"ULUS10202", "PortableOpsNative", "ULUS10202"}};
+constexpr std::span<const OtherGameSaves> kPortableOpsSaves{kPortableOpsSaveFolders};
+#endif
+
 constexpr mgs::SaveMpoMark kSaveMpoMark{kBase + kRelease.append_u32, kBase + kRelease.join_return};
 
 // The player's input step lives in each stage module: the shape of its first
@@ -154,6 +164,7 @@ const GameProfile &game() {
 
         .save_game_name = kRelease.disc_id,
         .save_folders = kSaveFolders,
+        .other_game_saves = kPortableOpsSaves,
 
         .adhoc_product_code = kRelease.disc_id,
         .adhoc_menu = false,
