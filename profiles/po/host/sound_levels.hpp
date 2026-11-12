@@ -17,6 +17,14 @@
 // music is not flagged as music. A voice with one of those categories
 // follows the Cutscenes level alone.
 //
+// The voice flag covers streamed speech only. Speech and grunts kept as
+// ADPCM (type 3) carry no flag: the characters' sets in banks 56-71 and
+// 74-82, the lines beside the soldiers' streamed speech in 72-96, and the
+// hit grunts in the three-sound banks up to 119. Nor do the headquarters'
+// radio calls, streamed from banks 46, 47, 53 and 54. Those count as voices
+// here by bank (heard from banks 46, 56, 76, 90, 98 and 99 on 2026-11-12;
+// the rest by their matching layout).
+//
 // Levels are applied on sound2's own thread, at the semaphore wait that
 // opens each block of its mix loop (0x8C98), before it works out the voices'
 // levels (0x763C). All four at 100% leaves the game as it is.
@@ -74,19 +82,23 @@ inline void save() {
     }
 }
 
-// The category of a sound's cue, as sound2 0x3B8 finds it; 0 without a bank.
-inline std::uint32_t category(const psprecomp::GuestMemory &memory, std::uint32_t catalogue, std::uint32_t sound) {
+// A sound's bank id and the category of its cue, as sound2 0x3B8 finds it;
+// zeros without a bank.
+struct Source {
+    std::uint32_t bank = 0u, category = 0u;
+};
+inline Source source(const psprecomp::GuestMemory &memory, std::uint32_t catalogue, std::uint32_t sound) {
     const std::uint32_t firsts = memory.load32(catalogue + 0x20u), banks = memory.load32(catalogue + 0x18u);
     const std::uint32_t count = std::min<std::uint32_t>(memory.load32(kBankIds), 0x1000u);
-    if (!memory.contains(firsts, count * 2u) || !memory.contains(banks, count * 16u)) return 0u;
+    if (!memory.contains(firsts, count * 2u) || !memory.contains(banks, count * 16u)) return {};
     std::uint32_t index = 0u;
     while (index < count && memory.load16(firsts + index * 2u) <= sound) ++index;
-    if (index == 0u) return 0u;
+    if (index == 0u) return {};
     --index;
     const std::uint32_t bank = memory.load32(banks + index * 16u);
-    if (bank == 0u || !memory.contains(bank, 12u)) return 0u;
+    if (bank == 0u || !memory.contains(bank, 12u)) return {index, 0u};
     const std::uint32_t cue = bank + memory.load32(bank + 8u) + (sound - memory.load16(firsts + index * 2u)) * 0x20u;
-    return memory.contains(cue, 0x20u) ? memory.load8(cue + 4u) : 0u;
+    return {index, memory.contains(cue, 0x20u) ? memory.load8(cue + 4u) : 0u};
 }
 
 inline void apply(psprecomp::GuestMemory &memory) {
@@ -101,8 +113,9 @@ inline void apply(psprecomp::GuestMemory &memory) {
     const auto level = [](std::size_t which) { return kUnity * static_cast<std::uint32_t>(percent[which]) / 100u; };
     for (std::size_t i = 0; i < 3u; ++i) memory.store16(kMasters + static_cast<std::uint32_t>(i) * 2u, static_cast<std::uint16_t>(level(i)));
 
-    // The category of the sound each voice plays, looked up once a sound.
-    static std::array<std::uint32_t, kVoiceCount> play_of{}, category_of{};
+    // Where the sound each voice plays comes from, looked up once a sound.
+    static std::array<std::uint32_t, kVoiceCount> play_of{};
+    static std::array<Source, kVoiceCount> source_of{};
     for (std::uint32_t slot = 0; slot < kVoiceCount; ++slot) {
         const std::uint32_t voice = kVoices + slot * kVoiceSize;
         if ((memory.load8(voice + 0x30u) & 0x80u) != 0u) continue;  // free
@@ -110,9 +123,12 @@ inline void apply(psprecomp::GuestMemory &memory) {
         std::size_t which = (play & 0x100000u) == 0u ? kMusic : (play & 0x200000u) != 0u ? kVoice : kEffects;
         if (play_of[slot] != play) {
             play_of[slot] = play;
-            category_of[slot] = category(memory, catalogue, play & 0xFFFFu);
+            source_of[slot] = source(memory, catalogue, play & 0xFFFFu);
         }
-        if (category_of[slot] >= 0xC8u && category_of[slot] <= 0xCAu) which = kCutscenes;
+        const std::uint32_t bank = source_of[slot].bank, kind = play >> 16 & 0xFu;
+        if (kind == 3u && bank >= 56u && bank <= 119u) which = kVoice;
+        if (kind == 5u && (bank == 46u || bank == 47u || bank == 53u || bank == 54u)) which = kVoice;
+        if (source_of[slot].category >= 0xC8u && source_of[slot].category <= 0xCAu) which = kCutscenes;
         // Fader 0: target, current, fraction, step, steps left. Flag 0x200
         // has 0x763C work the voice's level out again.
         const std::uint32_t fader = voice + 0x50u;
@@ -156,7 +172,7 @@ inline void draw() {
     constexpr std::array<const char *, kLevels> help{
         "Music during missions and in menus.",
         "Footsteps, weapons, alarms and menu sounds.",
-        "Soldiers' speech and radio chatter during missions.",
+        "Speech, radio calls and grunts during missions.",
         "Everything a cutscene plays: its speech, music and effects.",
     };
     for (std::size_t i = 0; i < kLevels; ++i)
