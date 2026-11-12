@@ -63,7 +63,9 @@ PO only. Both are off by default, under **Game > Peace Walker**.
   soldier. Snake is free after attaching the device; the soldier keeps lifting,
   so you can recover another. The capture jingle plays without the banner.
 - **Crouchwalking**: move while crouched. Hold Triangle for the slower stalking
-  gait; release movement to return to crouch idle.
+  gait; release movement to return to crouch idle. With the Mk22 out, the
+  upper body uses PW's Mk.22 crouchwalk clips (outside first person); an
+  older import offers the import again to add them.
 
 Use the feature's import action to select a Peace Walker PSP ISO or Master
 Collection installation folder. Then enable it and choose **Restart to apply**,
