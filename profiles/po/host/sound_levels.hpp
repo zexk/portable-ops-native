@@ -30,6 +30,7 @@
 // opens each block of its mix loop (0x8C98), before it works out the voices'
 // levels (0x763C). All four at 100% leaves the game as it is.
 
+#include "fulton_audio_catalog.hpp"
 #include "hle/hle_common.hpp"
 #include "install/user_data.hpp"
 #include "psprecomp/runtime.hpp"
@@ -129,6 +130,8 @@ inline void apply(psprecomp::GuestMemory &memory) {
         const std::uint32_t bank = source_of[slot].bank, kind = play >> 16 & 0xFu;
         if (kind == 3u && bank >= 56u && bank <= 119u) which = kVoice;
         if (kind == 5u && (bank == 46u || bank == 47u)) which = kVoice;
+        // Fulton's private bank: three foleys, then the soldier's grunt.
+        if ((play & 0xFFFFu) == fulton_audio_catalog::kFirstSound + 3u) which = kVoice;
         if (source_of[slot].category >= 0xC8u && source_of[slot].category <= 0xCAu) which = kCutscenes;
         // Fader 0: target, current, fraction, step, steps left. Flag 0x200
         // has 0x763C work the voice's level out again.
