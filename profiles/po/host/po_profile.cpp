@@ -15,6 +15,7 @@
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "settings_defaults.hpp"
+#include "sound_levels.hpp"
 #include "trace_models.hpp"
 #include "umd_key_table.hpp"
 #include "widescreen.hpp"
@@ -97,7 +98,11 @@ const GameProfile &game() {
         .infrastructure_url = &mgs::savempo_url,
         .settings_defaults = &mgs::settings_defaults,
 
-        .register_extra_hle = &mgs::fulton_assets::install,
+        .register_extra_hle =
+            +[](HleRegistrar &hle) {
+                mgs::fulton_assets::install(hle);
+                mgs::sound_levels::install(hle);
+            },
         .patch_loaded_image = &patch_image,
         .module_code_ready =
             +[](psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
@@ -106,8 +111,8 @@ const GameProfile &game() {
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
             },
-        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::fulton_settings::draw(); },
-        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::fulton_settings::reset(); },
+        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::sound_levels::draw(); mgs::fulton_settings::draw(); },
+        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::sound_levels::reset(); mgs::fulton_settings::reset(); },
         .game_settings_screen = &mgs::fulton_settings::screen,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,

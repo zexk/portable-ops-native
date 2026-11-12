@@ -55,6 +55,10 @@ Both games have **Game > Startup** toggles for skipping the logos and opening
 movie. **Game > Controls > Analog stalking** (off by default) stalks while the
 movement stick is tilted only slightly; it is checked in PO, not yet in PO+.
 
+PO has **Game > Sound** levels for music, effects, voices and cutscenes, all
+at 100% by default. They scale the game's own mix, so they act beside
+**Audio > Volume**. The opening movie follows the main volume only.
+
 ## Peace Walker features
 
 PO only. Both are off by default, under **Game > Peace Walker**.
