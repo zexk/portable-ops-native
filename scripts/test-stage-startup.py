@@ -44,6 +44,14 @@ assert struct.unpack_from('<I', startup)[0] == 0x0C000010 + (base >> 2)
 assert struct.unpack_from('<I', startup, 4)[0] == 0x0C000020
 assert struct.unpack_from('<I', linked, 4)[0] == 0x0C000020 + (stages.EDITIONS['po']['engine'][0] >> 2)
 assert stages.fnv1a64(startup) != stages.fnv1a64(linked)
+# module_start (jr ra and its delay slot) is all a startup image runs; one
+# that calls code outside the image cannot be bounded and gets full coverage.
+assert stages.startup_ranges(startup, base, base + 8) == [(8, 16)]
+assert stages.startup_ranges(startup, base, base) is None
+# A branch onto a delay slot walks on from there: b 16, then b 4 (the first
+# branch's delay slot), which runs on into jr ra at 8.
+walk = struct.pack('<8I', 0x10000003, 0, 0x03E00008, 0, 0x1000FFFC, 0, 0, 0)
+assert stages.startup_ranges(walk, base, base) == [(0, 24)]
 with tempfile.TemporaryDirectory() as directory:
     root = pathlib.Path(directory)
     dump, elf = root / 'startup.bin', root / 'startup.elf'
@@ -104,4 +112,19 @@ with tempfile.TemporaryDirectory() as directory:
             assert len((target / 'units.txt').read_text().split()) == 1
             modules.main()
             assert run.call_count == 2, 'Full corpus regenerated unnecessarily'
+        # A .startup sidecar narrows the corpus to module_start's closure.
+        dump.with_suffix('.startup').write_text('8-10\n')
+
+        def generate_startup(command, **kwargs):
+            if '--auto' in command:
+                return generate(command, **kwargs)
+            assert command[5:] == ['--exclude', '0xC-0x10', '--exclude', '0x0-0x8', '--entry', hex(base + 8)]
+            pathlib.Path(command[4]).write_bytes(b'ELF')
+
+        with patch.object(modules.subprocess, 'run', side_effect=generate_startup) as run:
+            modules.main()
+            assert run.call_count == 2
+            assert 'coverage=startup' in (target / 'meta.txt').read_text().splitlines()
+            modules.main()
+            assert run.call_count == 2, 'Startup corpus regenerated unnecessarily'
 print('stage startup image checks passed')

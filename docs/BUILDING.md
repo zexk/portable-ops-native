@@ -68,6 +68,22 @@ out of generated code so they reach the HLE. The runtime checks image identity
 at first entry and after instruction-cache flushes. `coverage=full` in generated
 metadata marks a corpus with an entry for every instruction word.
 
+Only `module_start` runs from a startup image: the engine links the stage when
+it returns, then flushes the instruction cache, and the runtime identifies the
+linked image. When the closure of `module_start` has no computed jumps or calls
+and stays inside the image, `stage-images.py` writes it to a `.startup` sidecar
+and `add-modules.py` compiles only that (`coverage=startup`). In every PO NA
+1.02 and PO+ NA 1.01 stage it is the same 13 instructions, where a full corpus
+of each startup image was half of the module build. Other images get full
+coverage.
+
+`scripts/stage-sweep.py` boots every stage on the disc headless, with the
+interpreter off, and reports any stage that stops for missing code:
+
+```sh
+python3 scripts/stage-sweep.py po /path/to/user-data/ULUS10202
+```
+
 To check a built module against its dump:
 
 ```sh

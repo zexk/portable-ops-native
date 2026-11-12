@@ -49,7 +49,11 @@ def main():
         assert fnv1a64(data) == digest, '%s: hash does not match its name' % dump.name
         prefix = re.sub(r'\W', '_', dump.stem)
         target = overlays / prefix
-        if (target / 'meta.txt').exists() and 'coverage=full' in (target / 'meta.txt').read_text().splitlines():
+        # A stage's startup image runs module_start alone (stage-images.py
+        # writes its closure to .startup): coverage=startup compiles only that.
+        startup = dump.with_suffix('.startup')
+        coverage = 'startup' if startup.exists() else 'full'
+        if (target / 'meta.txt').exists() and 'coverage=' + coverage in (target / 'meta.txt').read_text().splitlines():
             continue
         overlays.mkdir(parents=True, exist_ok=True)
         # Import stubs inside the code (<id>.stubs, offsets START-END a line)
@@ -60,6 +64,13 @@ def main():
             for line in stubs.read_text().split():
                 start, end = (int(text, 16) for text in line.split('-'))
                 exclude += ['--exclude', '0x%X-0x%X' % (start, end)]
+        if startup.exists():
+            cursor = 0
+            for line in startup.read_text().split() + ['%X-%X' % (len(data), len(data))]:
+                start, end = (int(text, 16) for text in line.split('-'))
+                if cursor < start:
+                    exclude += ['--exclude', '0x%X-0x%X' % (cursor, start)]
+                cursor = end
         entry = dump.with_suffix('.entry')
         if entry.exists():
             exclude += ['--entry', entry.read_text().strip()]
@@ -73,8 +84,8 @@ def main():
             subprocess.run([str(recomp), str(elf), '--auto', str(staged), '0x%08X' % base, '--prefix', prefix],
                            check=True, stdout=subprocess.DEVNULL)
             elf.unlink()
-            (staged / 'meta.txt').write_text('base=0x%08X\nname=%s\nsize=%d\ncode_size=%d\nhash=0x%016X\nsource=%s\ncoverage=full\n'
-                                             % (base, name, len(data), len(data), digest, dump.name))
+            (staged / 'meta.txt').write_text('base=0x%08X\nname=%s\nsize=%d\ncode_size=%d\nhash=0x%016X\nsource=%s\ncoverage=%s\n'
+                                             % (base, name, len(data), len(data), digest, dump.name, coverage))
             if target.exists():
                 shutil.rmtree(target)
             staged.rename(target)

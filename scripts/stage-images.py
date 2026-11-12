@@ -8,7 +8,9 @@ stage's .rlc file (from its _zar archive): offsets into the engine's text and
 data, relocated by the engine's own loader (PO 0x1E04 stores the table, 0x1C0C
 applies it) with the same entry format as a PRX's relocations. Both startup
 and linked code are written as OUT_DIR/mod<BASE>_mgp_stage_<HASH>.bin, with
-module_start in a .entry sidecar, without playing to the stage. Then: scripts/add-modules.py <edition> OUT_DIR
+module_start in a .entry sidecar, without playing to the stage; a startup
+image also gets a .startup sidecar with the only code that runs from it
+(startup_ranges). Then: scripts/add-modules.py <edition> OUT_DIR
 """
 import pathlib
 import struct
@@ -133,6 +135,59 @@ def stage_code(prx, rlc, edition, *, linked=True):
     return bytes(memory[:end])
 
 
+def startup_ranges(code, base, entry):
+    """module_start's static closure in a startup image, as byte ranges.
+
+    Only module_start runs from a startup image: the engine links the stage
+    once it returns and flushes the instruction cache, and the runtime then
+    identifies the linked image. A closure without computed jumps or calls
+    that stays inside the image is all of that code; otherwise None, and the
+    image gets a full corpus.
+    """
+    # Words to compile, and instructions walked (a delay slot is compiled but
+    # walked only if a branch also lands on it).
+    seen, walked, work = set(), set(), [entry - base]
+    while work:
+        at = work.pop()
+        while at not in walked:
+            if not 0 <= at <= len(code) - 8:
+                return None
+            word, = struct.unpack_from('<I', code, at)
+            seen.add(at)
+            walked.add(at)
+            op, rs, rt = word >> 26, (word >> 21) & 31, (word >> 16) & 31
+            branch = at + 4 + (((word & 0xFFFF) ^ 0x8000) - 0x8000) * 4
+            jump = (((base + at + 4) & 0xF0000000) | (word & 0x3FFFFFF) << 2) - base
+            if op == 0 and (word & 0x3F) in (8, 9):  # jr, jalr
+                if (word & 0x3F) == 9 or rs != 31:
+                    return None
+                seen.add(at + 4)
+                break
+            if op in (2, 3) or (op == 4 and rs == rt == 0):  # j, jal, b
+                seen.add(at + 4)
+                target = jump if op in (2, 3) else branch
+                if op == 3:
+                    work.append(target)
+                    at += 8
+                else:
+                    at = target
+                continue
+            if op in (4, 5, 6, 7, 0x14, 0x15, 0x16, 0x17) or (op == 1 and rt in (0, 1, 2, 3, 16, 17, 18, 19)) \
+                    or (op in (0x11, 0x12) and rs == 8):  # conditional branches and calls, FPU and VFPU too
+                seen.add(at + 4)
+                work.append(branch)
+                at += 8
+                continue
+            at += 4
+    ranges = []
+    for at in sorted(seen):
+        if ranges and ranges[-1][1] == at:
+            ranges[-1][1] = at + 4
+        else:
+            ranges.append([at, at + 4])
+    return [tuple(r) for r in ranges]
+
+
 def zar_files(zar):
     data = zlib.decompress(zar[4:])
     files, position = {}, 4
@@ -171,7 +226,15 @@ def main():
             # module_start need not have a prologue the analyzer recognises.
             entry = EDITIONS[edition]['stage'] + struct.unpack_from('<I', prx, 0x18)[0]
             path.with_suffix('.entry').write_text('0x%08X\n' % entry)
-            print('%s (%s): %s' % (stage, 'linked' if linked else 'startup', path.name))
+            # A startup image needs code for module_start only (.startup, START-END
+            # a line, as in .stubs); a linked image, or one equal to it, all of it.
+            ranges = None if linked else startup_ranges(code, EDITIONS[edition]['stage'], entry)
+            if ranges:
+                path.with_suffix('.startup').write_text(''.join('%X-%X\n' % r for r in ranges))
+            else:
+                path.with_suffix('.startup').unlink(missing_ok=True)
+            print('%s (%s): %s%s' % (stage, 'linked' if linked else 'startup', path.name,
+                                     ' (full: module_start has computed jumps)' if not linked and not ranges else ''))
 
 
 if __name__ == '__main__':

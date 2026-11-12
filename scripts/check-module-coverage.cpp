@@ -29,24 +29,31 @@ int main(int argc, char **argv) {
     CorpusProcessState process{};
     Host host(&api, &process);
     install(host);
-    std::set<std::uint32_t> excluded;
-    auto sidecar = image;
-    sidecar.replace_extension(".stubs");
-    std::ifstream stubs(sidecar);
-    for (std::string range; stubs >> range;) {
-        const auto dash = range.find('-');
-        const auto start = std::stoul(range.substr(0, dash), nullptr, 16);
-        const auto end = std::stoul(range.substr(dash + 1), nullptr, 16);
-        for (auto offset = start; offset < end; offset += 4) excluded.insert(base + offset);
-    }
+    // Sidecar ranges, START-END byte offsets a line: import stubs (.stubs) stay
+    // out; a startup image (.startup) has code for module_start alone.
+    const auto ranges = [&](const char *extension) {
+        std::set<std::uint32_t> words;
+        auto sidecar = image;
+        std::ifstream file(sidecar.replace_extension(extension));
+        for (std::string range; file >> range;) {
+            const auto dash = range.find('-');
+            const auto start = std::stoul(range.substr(0, dash), nullptr, 16);
+            const auto end = std::stoul(range.substr(dash + 1), nullptr, 16);
+            for (auto offset = start; offset < end; offset += 4) words.insert(base + offset);
+        }
+        return words;
+    };
+    const auto excluded = ranges(".stubs");
+    const auto startup = ranges(".startup");
     const auto size = std::filesystem::file_size(image);
     for (std::uint32_t offset = 0; offset + 4 <= size; offset += 4) {
         const auto pc = base + offset;
-        if (entries.contains(pc) == excluded.contains(pc)) {
+        if (entries.contains(pc) != (!excluded.contains(pc) && (startup.empty() || startup.contains(pc)))) {
             std::cerr << "Wrong coverage at 0x" << std::hex << pc << '\n';
             return 1;
         }
     }
-    std::cout << image.filename().string() << ": " << entries.size() << " native entries, import stubs excluded\n";
+    std::cout << image.filename().string() << ": " << entries.size() << " native entries, import stubs excluded"
+              << (startup.empty() ? "" : ", module_start only") << '\n';
     dlclose(library);
 }
