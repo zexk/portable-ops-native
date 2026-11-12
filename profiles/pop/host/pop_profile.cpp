@@ -116,11 +116,29 @@ constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060
 // (sound_levels.hpp). The voices, the catalogue pointer and the bank count
 // sit at the same distances from the masters in all three; the code is at
 // the same offsets. Found by matching PO's routines in each release's
-// sound2. No sound is sorted beyond the game's own flags here: which of
-// this game's banks hold unflagged speech has not been looked at.
+// sound2.
+//
+// Speech and grunts the game does not flag as voices, by bank, as in PO.
+// This catalogue (ULUS-10290 1.01, read from the running game) keeps PO's
+// banks in order under other ids: PO's 41-54 are 53-66 here and PO's 55-119
+// are 94-158, with banks 67-93 and 159 new. So PO's ADPCM voice banks 56-119
+// are 95-158 and its radio calls 46 and 47 are 58 and 59. Of the new ones,
+// 67-70 and 83-86 have a character set's layout, 75-78 and 87-89 a grunt
+// bank's, and 71-74, 79-82 and 90-93 hold unflagged streams beside them (15,
+// 7 and 2 a bank), taken for more speech. A soldier's grunt from bank 115
+// was heard as an effect before this, on 2026-11-12; the rest is by layout.
+// The other releases' bank ids were not read.
+std::size_t classify_sound(std::size_t flagged, std::uint32_t play, std::uint32_t bank, std::uint32_t) {
+    const std::uint32_t kind = play >> 16 & 0xFu;
+    if (kind == 3u && bank >= 67u && bank <= 159u && bank != 94u) return mgs::sound_levels::kVoice;
+    if (kind == 5u && (bank == 58u || bank == 59u || (bank >= 71u && bank <= 74u) || (bank >= 79u && bank <= 82u) ||
+                       (bank >= 90u && bank <= 93u)))
+        return mgs::sound_levels::kVoice;
+    return flagged;
+}
 constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + kSound2Data + 0x1DCu, kSound2 + kSound2Data + 0x1FCu,
                                                  kSound2 + kSound2Data, kSound2 + kSound2Data - 0x49C4u,
-                                                 kSound2 + 0x8A1Cu};
+                                                 kSound2 + 0x8A1Cu, &classify_sound};
 
 void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                        std::span<const std::uint8_t> code) {

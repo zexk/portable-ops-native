@@ -48,10 +48,10 @@ struct Config {
     std::uint32_t voices;     // 0x22 records of 0x214 bytes
     std::uint32_t mix_wait;   // where the mix loop's first semaphore wait returns
     // The level a voice follows, given the one its play id's flags say, its
-    // sound's bank id and its cue's category. Null: the flags alone, and no
-    // Cutscenes level.
+    // sound's bank id and its cue's category. Null: the flags alone.
     std::size_t (*classify)(std::size_t flagged, std::uint32_t play, std::uint32_t bank,
                             std::uint32_t category) = nullptr;
+    bool cutscenes = false;  // the game has cutscene streams classify tells apart
 };
 
 constexpr std::uint32_t kVoiceSize = 0x214u, kVoiceCount = 0x22u, kUnity = 0x1000u;
@@ -174,11 +174,10 @@ inline void draw() {
     const std::array<const char *, kLevels> help{
         "Music during missions and in menus.",
         "Footsteps, weapons, alarms and menu sounds.",
-        config.classify != nullptr ? "Speech, radio calls and grunts during missions."
-                                   : "Speech the game itself marks as a voice.",
+        "Speech, radio calls and grunts during missions.",
         "Everything a cutscene plays: its speech, music and effects.",
     };
-    const std::size_t shown = config.classify != nullptr ? kLevels : kCutscenes;
+    const std::size_t shown = config.cutscenes ? kLevels : kCutscenes;
     for (std::size_t i = 0; i < shown; ++i)
         if (slider_row(labels[i], percent[i], 0, 100, 5, "%d%%", {false, {}, help[i]})) save();
 #endif

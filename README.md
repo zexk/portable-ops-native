@@ -57,9 +57,8 @@ movement stick is tilted only slightly; it is checked in PO, not yet in PO+.
 
 **Audio > Mix** has levels for music, effects and voices, all at 100% by
 default; PO adds one for cutscenes. They scale the game's own mix, under
-**Audio > Master**. PO also counts grunts, radio calls and unmarked speech
-as voices; PO+ goes by the game's own marks alone so far. The opening movie
-follows Master only.
+**Audio > Master**. Grunts, radio calls and speech the game leaves unmarked
+count as voices. The opening movie follows Master only.
 
 ## Peace Walker features
 

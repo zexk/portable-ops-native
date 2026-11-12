@@ -72,7 +72,7 @@ std::size_t classify_sound(std::size_t flagged, std::uint32_t play, std::uint32_
 // sound2 is loaded at 0x08B10100 in this build.
 constexpr std::uint32_t kSound2 = 0x08B10100u;
 constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + 0x2D340u, kSound2 + 0x2D360u, kSound2 + 0x2D164u,
-                                                 kSound2 + 0x287A0u, kSound2 + 0x8CA0u, &classify_sound};
+                                                 kSound2 + 0x287A0u, kSound2 + 0x8CA0u, &classify_sound, true};
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera(runtime, kCamera);
