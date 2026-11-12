@@ -9,6 +9,7 @@
 #include "crouchwalking.hpp"
 #include "detail_distance.hpp"
 #include "fulton.hpp"
+#include "fulton_audio_catalog.hpp"
 #include "fulton_settings.hpp"
 #include "interpolation.hpp"
 #include "presence.hpp"
@@ -42,6 +43,36 @@ constexpr std::uint32_t kCameraUpdate = 0x08804000u + 0x10D304u;
 
 // The view builder and the x scale it loads.
 constexpr mgs::WidescreenAddresses kWidescreen{0x08804000u + 0x41124u, 0x08804000u + 0x1E5728u};
+
+// Sounds whose flags do not say what they are (sound_levels.hpp).
+//
+// A cutscene's streams (the oss_ banks) carry cue categories 0xC8 speech,
+// 0xC9 music, 0xCA effects, where everything else has 0; most of their
+// music is not flagged as music. A voice with one of those categories
+// follows the Cutscenes level alone.
+//
+// The voice flag covers streamed speech only. Speech and grunts kept as
+// ADPCM (type 3) carry no flag: the characters' sets in banks 56-71 and
+// 74-82, the lines beside the soldiers' streamed speech in 72-96, and the
+// hit grunts in the three-sound banks up to 119. Nor do the headquarters'
+// radio calls, streamed from banks 46 and 47. Those count as voices here by
+// bank (heard from banks 46, 56, 76, 90, 98 and 99 on 2026-11-12; the rest
+// by their matching layout). Banks 53 and 54 look like 46 but are not
+// speech: 53 is the truck that brings the squad to a stage.
+std::size_t classify_sound(std::size_t flagged, std::uint32_t play, std::uint32_t bank, std::uint32_t category) {
+    if (category >= 0xC8u && category <= 0xCAu) return mgs::sound_levels::kCutscenes;
+    const std::uint32_t kind = play >> 16 & 0xFu;
+    if (kind == 3u && bank >= 56u && bank <= 119u) return mgs::sound_levels::kVoice;
+    if (kind == 5u && (bank == 46u || bank == 47u)) return mgs::sound_levels::kVoice;
+    // Fulton's private bank: three foleys, then the soldier's grunt.
+    if ((play & 0xFFFFu) == mgs::fulton_audio_catalog::kFirstSound + 3u) return mgs::sound_levels::kVoice;
+    return flagged;
+}
+
+// sound2 is loaded at 0x08B10100 in this build.
+constexpr std::uint32_t kSound2 = 0x08B10100u;
+constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + 0x2D340u, kSound2 + 0x2D360u, kSound2 + 0x2D164u,
+                                                 kSound2 + 0x287A0u, kSound2 + 0x8CA0u, &classify_sound};
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_camera(runtime, kCamera);
@@ -101,7 +132,7 @@ const GameProfile &game() {
         .register_extra_hle =
             +[](HleRegistrar &hle) {
                 mgs::fulton_assets::install(hle);
-                mgs::sound_levels::install(hle);
+                mgs::sound_levels::install(hle, kSoundLevels);
             },
         .patch_loaded_image = &patch_image,
         .module_code_ready =
@@ -111,8 +142,10 @@ const GameProfile &game() {
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
             },
-        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::sound_levels::draw(); mgs::fulton_settings::draw(); },
-        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::sound_levels::reset(); mgs::fulton_settings::reset(); },
+        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::fulton_settings::draw(); },
+        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::fulton_settings::reset(); },
+        .draw_audio_settings = &mgs::sound_levels::draw,
+        .reset_audio_settings = &mgs::sound_levels::reset,
         .game_settings_screen = &mgs::fulton_settings::screen,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,

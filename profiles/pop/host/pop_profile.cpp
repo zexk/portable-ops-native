@@ -15,6 +15,7 @@
 #include "profile.hpp"
 #include "savempo.hpp"
 #include "settings_defaults.hpp"
+#include "sound_levels.hpp"
 #include "umd_key_table.hpp"
 #include "widescreen.hpp"
 
@@ -66,6 +67,7 @@ constexpr Release kRelease{"ULES01003", "ULES-01003", "the European release (ver
                            0x1446B0u, 0x13966Cu, 0x299A2Cu, 0xB9B84u, 0x1E6930u, 0x17A6D0u, 0x49968u, 0x170F6Cu, 0x41FDCu, 1u,
                            {"ULES01003001", "ULES01003002", "ULES01003003"},
                            0x15A68u, 0x19E318u, 0x46738u, 104u, 0x33190u, 0x330B0u, 0x32F14u};
+constexpr std::uint32_t kSound2 = 0x08AB3100u, kSound2Data = 0x2C3A4u;
 #elif defined(MGS_REGION_JP)
 // Japanese console, Japanese.
 constexpr Release kRelease{"ULJM05261", "ULJM-05261", "the Japanese release (version 1.03)",
@@ -74,6 +76,7 @@ constexpr Release kRelease{"ULJM05261", "ULJM-05261", "the Japanese release (ver
                            0x1424DCu, 0x137498u, 0x295E0Cu, 0xB8544u, 0x1E2D10u, 0x1732B0u, 0x48DB4u, 0x16A82Cu, 0x41430u, 0u,
                            {"ULJM05261001", "ULJM05261002", "ULJM05261003"},
                            0x157C0u, 0x196D18u, 0x45B84u, 103u, 0x33048u, 0x32F68u, 0x32DCCu};
+constexpr std::uint32_t kSound2 = 0x08AAF100u, kSound2Data = 0x2C924u;
 #else
 // North American console, English.
 constexpr Release kRelease{"ULUS10290", "ULUS-10290", "the North American release (version 1.01)",
@@ -82,6 +85,7 @@ constexpr Release kRelease{"ULUS10290", "ULUS-10290", "the North American releas
                            0x142598u, 0x137554u, 0x294D5Cu, 0xB8644u, 0x1E1C60u, 0x1731F0u, 0x48E1Cu, 0x16A754u, 0x41498u, 1u,
                            {"ULUS10290001", "ULUS10290002", "ULUS10290003"},
                            0x157C0u, 0x196C18u, 0x45BECu, 103u, 0x330A0u, 0x32FC0u, 0x32E24u};
+constexpr std::uint32_t kSound2 = 0x08AAE100u, kSound2Data = 0x2C924u;
 #endif
 
 constexpr SaveFolder kSaveFolders[] = {
@@ -107,6 +111,16 @@ constexpr mgs::SaveMpoMark kSaveMpoMark{kBase + kRelease.append_u32, kBase + kRe
 constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060000u, 0x24070000u,
                                                0xafb10000u, 0x00a08821u, 0x24050000u, 0xafb00000u,
                                                0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
+
+// Where sound2 loads in each release, and its three master levels
+// (sound_levels.hpp). The voices, the catalogue pointer and the bank count
+// sit at the same distances from the masters in all three; the code is at
+// the same offsets. Found by matching PO's routines in each release's
+// sound2. No sound is sorted beyond the game's own flags here: which of
+// this game's banks hold unflagged speech has not been looked at.
+constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + kSound2Data + 0x1DCu, kSound2 + kSound2Data + 0x1FCu,
+                                                 kSound2 + kSound2Data, kSound2 + kSound2Data - 0x49C4u,
+                                                 kSound2 + 0x8A1Cu};
 
 void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                        std::span<const std::uint8_t> code) {
@@ -172,10 +186,13 @@ const GameProfile &game() {
         .infrastructure_url = &mgs::savempo_url,
         .settings_defaults = &mgs::settings_defaults,
 
+        .register_extra_hle = +[](HleRegistrar &hle) { mgs::sound_levels::install(hle, kSoundLevels); },
         .patch_loaded_image = &patch_image,
         .module_code_ready = &module_code_ready,
         .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); },
         .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); },
+        .draw_audio_settings = &mgs::sound_levels::draw,
+        .reset_audio_settings = &mgs::sound_levels::reset,
         .camera = &mgs::kCameraDriver,
         .view_aspect_frame = &mgs::view_aspect_frame,
         .adjustable_fov = true,

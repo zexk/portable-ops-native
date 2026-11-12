@@ -1,36 +1,27 @@
 #pragma once
 
-// Game > Sound: separate levels for music, effects, voices and cutscenes
-// (PO ULUS-10202 1.02; sound2 at 0x08B10100).
+// Audio > Mix: separate levels for music, effects, voices and, where the
+// game tells them apart, cutscenes.
 //
 // sound2 mixes every voice itself and hands the host one stream, so the
 // levels are set where the game keeps its own. A voice's level is the
-// product of six faders; fader 0 starts at one of three masters at sound2
-// 0x2D164, picked by the play id: music (no 0x100000: entries flagged 0x80,
+// product of six faders; fader 0 starts at one of three masters (PO: sound2
+// 0x2D164), picked by the play id: music (no 0x100000: entries flagged 0x80,
 // the reserved stream ids), voices (0x200000: entries flagged 0x20) and
 // effects. Export 0xFA32C9B9 sets a master and fader 0 of the voices playing;
 // the engine calls it once, at start, for full level. Here the masters and
 // each playing voice's fader 0 are written instead, as that export would.
 //
-// A cutscene's streams (the oss_ banks) carry cue categories 0xC8 speech,
-// 0xC9 music, 0xCA effects, where everything else has 0; most of their
-// music is not flagged as music. A voice with one of those categories
-// follows the Cutscenes level alone.
-//
-// The voice flag covers streamed speech only. Speech and grunts kept as
-// ADPCM (type 3) carry no flag: the characters' sets in banks 56-71 and
-// 74-82, the lines beside the soldiers' streamed speech in 72-96, and the
-// hit grunts in the three-sound banks up to 119. Nor do the headquarters'
-// radio calls, streamed from banks 46 and 47. Those count as voices here by
-// bank (heard from banks 46, 56, 76, 90, 98 and 99 on 2026-11-12; the rest
-// by their matching layout). Banks 53 and 54 look like 46 but are not
-// speech: 53 is the truck that brings the squad to a stage.
-//
 // Levels are applied on sound2's own thread, at the semaphore wait that
-// opens each block of its mix loop (0x8C98), before it works out the voices'
-// levels (0x763C). All four at 100% leaves the game as it is.
+// opens each block of its mix loop (PO: 0x8C98), before it works out the
+// voices' levels (PO: 0x763C). Every level at 100% leaves the game as it is.
+//
+// The addresses are PO ULUS-10202 1.02's. PO+'s three releases have the same
+// code at other offsets (the routines above match instruction for
+// instruction with their immediates left out, and every offset into a voice
+// is the same); their addresses were read from the matching instructions.
+// A game's own sorting of sounds the flags get wrong is Config::classify.
 
-#include "fulton_audio_catalog.hpp"
 #include "hle/hle_common.hpp"
 #include "install/user_data.hpp"
 #include "psprecomp/runtime.hpp"
@@ -47,16 +38,25 @@
 #include <string>
 
 namespace mgs::sound_levels {
-constexpr std::uint32_t kSound2 = 0x08B10100u;
-constexpr std::uint32_t kCatalogue = kSound2 + 0x2D340u;  // pointer to the SHDS table
-constexpr std::uint32_t kBankIds = kSound2 + 0x2D360u;    // how many bank ids it has
-constexpr std::uint32_t kMasters = kSound2 + 0x2D164u;    // music, effects, voices
-constexpr std::uint32_t kVoices = kSound2 + 0x287A0u, kVoiceSize = 0x214u, kVoiceCount = 0x22u;
-constexpr std::uint32_t kMixLoopWait = kSound2 + 0x8CA0u;  // where the loop's first wait returns
-constexpr std::uint32_t kUnity = 0x1000u;
-
 enum : std::size_t { kMusic, kEffects, kVoice, kCutscenes, kLevels };
+
+// Guest addresses in a loaded sound2.
+struct Config {
+    std::uint32_t catalogue;  // pointer to the SHDS table
+    std::uint32_t bank_ids;   // how many bank ids it has
+    std::uint32_t masters;    // music, effects, voices: 16 bits each
+    std::uint32_t voices;     // 0x22 records of 0x214 bytes
+    std::uint32_t mix_wait;   // where the mix loop's first semaphore wait returns
+    // The level a voice follows, given the one its play id's flags say, its
+    // sound's bank id and its cue's category. Null: the flags alone, and no
+    // Cutscenes level.
+    std::size_t (*classify)(std::size_t flagged, std::uint32_t play, std::uint32_t bank,
+                            std::uint32_t category) = nullptr;
+};
+
+constexpr std::uint32_t kVoiceSize = 0x214u, kVoiceCount = 0x22u, kUnity = 0x1000u;
 constexpr std::array<const char *, kLevels> kKeys{"sound.music", "sound.effects", "sound.voices", "sound.cutscenes"};
+inline Config config{};
 inline std::array<int, kLevels> percent{100, 100, 100, 100};
 inline bool loaded = false;
 inline bool applied = false;  // the game's levels are not its own right now
@@ -84,14 +84,14 @@ inline void save() {
     }
 }
 
-// A sound's bank id and the category of its cue, as sound2 0x3B8 finds it;
-// zeros without a bank.
+// A sound's bank id and the category of its cue, as sound2 (PO: 0x3B8) finds
+// it; zeros without a bank.
 struct Source {
     std::uint32_t bank = 0u, category = 0u;
 };
 inline Source source(const psprecomp::GuestMemory &memory, std::uint32_t catalogue, std::uint32_t sound) {
     const std::uint32_t firsts = memory.load32(catalogue + 0x20u), banks = memory.load32(catalogue + 0x18u);
-    const std::uint32_t count = std::min<std::uint32_t>(memory.load32(kBankIds), 0x1000u);
+    const std::uint32_t count = std::min<std::uint32_t>(memory.load32(config.bank_ids), 0x1000u);
     if (!memory.contains(firsts, count * 2u) || !memory.contains(banks, count * 16u)) return {};
     std::uint32_t index = 0u;
     while (index < count && memory.load16(firsts + index * 2u) <= sound) ++index;
@@ -107,34 +107,31 @@ inline void apply(psprecomp::GuestMemory &memory) {
     load();
     const bool wanted = std::any_of(percent.begin(), percent.end(), [](int value) { return value != 100; });
     if (!wanted && !applied) return;
-    if (!memory.contains(kCatalogue, 0x24u)) return;
-    const std::uint32_t catalogue = memory.load32(kCatalogue);
+    if (!memory.contains(config.catalogue, 0x24u)) return;
+    const std::uint32_t catalogue = memory.load32(config.catalogue);
     if (!memory.contains(catalogue, 0x34u) || memory.load32(catalogue) != 0x53444853u) return;  // "SHDS"
     applied = wanted;
 
     const auto level = [](std::size_t which) { return kUnity * static_cast<std::uint32_t>(percent[which]) / 100u; };
-    for (std::size_t i = 0; i < 3u; ++i) memory.store16(kMasters + static_cast<std::uint32_t>(i) * 2u, static_cast<std::uint16_t>(level(i)));
+    for (std::uint32_t i = 0; i < 3u; ++i) memory.store16(config.masters + i * 2u, static_cast<std::uint16_t>(level(i)));
 
     // Where the sound each voice plays comes from, looked up once a sound.
     static std::array<std::uint32_t, kVoiceCount> play_of{};
     static std::array<Source, kVoiceCount> source_of{};
     for (std::uint32_t slot = 0; slot < kVoiceCount; ++slot) {
-        const std::uint32_t voice = kVoices + slot * kVoiceSize;
+        const std::uint32_t voice = config.voices + slot * kVoiceSize;
         if ((memory.load8(voice + 0x30u) & 0x80u) != 0u) continue;  // free
         const std::uint32_t play = memory.load32(voice + 0x1Cu);
         std::size_t which = (play & 0x100000u) == 0u ? kMusic : (play & 0x200000u) != 0u ? kVoice : kEffects;
-        if (play_of[slot] != play) {
-            play_of[slot] = play;
-            source_of[slot] = source(memory, catalogue, play & 0xFFFFu);
+        if (config.classify != nullptr) {
+            if (play_of[slot] != play) {
+                play_of[slot] = play;
+                source_of[slot] = source(memory, catalogue, play & 0xFFFFu);
+            }
+            which = config.classify(which, play, source_of[slot].bank, source_of[slot].category);
         }
-        const std::uint32_t bank = source_of[slot].bank, kind = play >> 16 & 0xFu;
-        if (kind == 3u && bank >= 56u && bank <= 119u) which = kVoice;
-        if (kind == 5u && (bank == 46u || bank == 47u)) which = kVoice;
-        // Fulton's private bank: three foleys, then the soldier's grunt.
-        if ((play & 0xFFFFu) == fulton_audio_catalog::kFirstSound + 3u) which = kVoice;
-        if (source_of[slot].category >= 0xC8u && source_of[slot].category <= 0xCAu) which = kCutscenes;
         // Fader 0: target, current, fraction, step, steps left. Flag 0x200
-        // has 0x763C work the voice's level out again.
+        // has sound2 work the voice's level out again.
         const std::uint32_t fader = voice + 0x50u;
         const auto want = static_cast<std::uint16_t>(level(which));
         if (memory.load16(fader) == want && memory.load16(fader + 2u) == want) continue;
@@ -148,7 +145,8 @@ inline void apply(psprecomp::GuestMemory &memory) {
 }
 
 // sceKernelWaitSema, with the levels applied when sound2's mix loop calls it.
-inline void install(portablekit::HleRegistrar &hle) {
+inline void install(portablekit::HleRegistrar &hle, const Config &addresses) {
+    config = addresses;
     const std::string library = "ThreadManForUser";
     constexpr std::uint32_t kWaitSema = 0x4E3A1105u;
     const portablekit::HleFunction previous = hle.bound_function(library, kWaitSema);
@@ -157,7 +155,7 @@ inline void install(portablekit::HleRegistrar &hle) {
         return;
     }
     hle.bind(library, kWaitSema, [previous](portablekit::Runtime &runtime, portablekit::AllegrexContext &ctx) {
-        if (ctx.gpr[31] == kMixLoopWait) apply(runtime.memory());
+        if (ctx.gpr[31] == config.mix_wait) apply(runtime.memory());
         previous(runtime, ctx);
     });
 }
@@ -171,15 +169,17 @@ inline void draw() {
 #if defined(PORTABLEKIT_HAS_RENDERER)
     using namespace portablekit::ui;
     load();
-    section("Sound");
+    section("Mix");
     constexpr std::array<const char *, kLevels> labels{"Music", "Effects", "Voices", "Cutscenes"};
-    constexpr std::array<const char *, kLevels> help{
+    const std::array<const char *, kLevels> help{
         "Music during missions and in menus.",
         "Footsteps, weapons, alarms and menu sounds.",
-        "Speech, radio calls and grunts during missions.",
+        config.classify != nullptr ? "Speech, radio calls and grunts during missions."
+                                   : "Speech the game itself marks as a voice.",
         "Everything a cutscene plays: its speech, music and effects.",
     };
-    for (std::size_t i = 0; i < kLevels; ++i)
+    const std::size_t shown = config.classify != nullptr ? kLevels : kCutscenes;
+    for (std::size_t i = 0; i < shown; ++i)
         if (slider_row(labels[i], percent[i], 0, 100, 5, "%d%%", {false, {}, help[i]})) save();
 #endif
 }
