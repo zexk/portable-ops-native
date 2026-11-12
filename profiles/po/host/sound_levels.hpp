@@ -21,9 +21,10 @@
 // ADPCM (type 3) carry no flag: the characters' sets in banks 56-71 and
 // 74-82, the lines beside the soldiers' streamed speech in 72-96, and the
 // hit grunts in the three-sound banks up to 119. Nor do the headquarters'
-// radio calls, streamed from banks 46, 47, 53 and 54. Those count as voices
-// here by bank (heard from banks 46, 56, 76, 90, 98 and 99 on 2026-11-12;
-// the rest by their matching layout).
+// radio calls, streamed from banks 46 and 47. Those count as voices here by
+// bank (heard from banks 46, 56, 76, 90, 98 and 99 on 2026-11-12; the rest
+// by their matching layout). Banks 53 and 54 look like 46 but are not
+// speech: 53 is the truck that brings the squad to a stage.
 //
 // Levels are applied on sound2's own thread, at the semaphore wait that
 // opens each block of its mix loop (0x8C98), before it works out the voices'
@@ -127,7 +128,7 @@ inline void apply(psprecomp::GuestMemory &memory) {
         }
         const std::uint32_t bank = source_of[slot].bank, kind = play >> 16 & 0xFu;
         if (kind == 3u && bank >= 56u && bank <= 119u) which = kVoice;
-        if (kind == 5u && (bank == 46u || bank == 47u || bank == 53u || bank == 54u)) which = kVoice;
+        if (kind == 5u && (bank == 46u || bank == 47u)) which = kVoice;
         if (source_of[slot].category >= 0xC8u && source_of[slot].category <= 0xCAu) which = kCutscenes;
         // Fader 0: target, current, fraction, step, steps left. Flag 0x200
         // has 0x763C work the voice's level out again.
