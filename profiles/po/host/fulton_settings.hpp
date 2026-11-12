@@ -127,10 +127,12 @@ inline void draw() {
                          "Applies after restarting the game.";
     if (toggle_row("Crouchwalking (experimental)", crouchwalking::selected, crouch))
         crouchwalking::save(!crouchwalking::selected);
-    if (!crouchwalking::available && !importing.valid() &&
+    // Also for an import made before the Mk22's upper body was taken along.
+    if ((!crouchwalking::available || !crouchwalking::upper_imported) && !importing.valid() &&
         button_row("Import crouchwalk assets…", {false, {},
                    "Choose your Peace Walker PSP disc image (.iso), Master Collection installation folder, "
-                   "or converted crouchwalk folder. Importing leaves crouchwalking off."})) {
+                   "or converted crouchwalk folder. Importing again adds the Mk22's upper body to an older "
+                   "import. Importing leaves crouchwalking off."})) {
         importing_crouchwalk = true;
         FileBrowser::Options browse;
         browse.empty_note = "No folders or disc images here.";
@@ -144,7 +146,9 @@ inline void draw() {
     // assets there is nothing to apply; the feature's note says what is missing.
     const bool fulton_waits =
         !override && fulton_assets::available && fulton_assets::selected != fulton_assets::enabled();
-    const bool crouch_waits = crouchwalking::available && crouchwalking::selected != crouchwalking::enabled;
+    const bool crouch_waits =
+        crouchwalking::available && (crouchwalking::selected != crouchwalking::enabled ||
+                                     (crouchwalking::enabled && crouchwalking::upper_imported && !crouchwalking::has_upper));
     if ((fulton_waits || crouch_waits) &&
         button_row("Restart to apply",
                    {false, {}, "Closes the game and starts it again at the title screen. Progress since your last "

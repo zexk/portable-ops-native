@@ -321,32 +321,39 @@ constexpr std::uint32_t joint_names[19] = {
     0x2c5646, 0x24d686, 0x25d67d, 0x7f1c41, 0xc63f64, 0xc5162c, 0x801c4d, 0xc93fa4, 0x251e2d};
 constexpr std::uint8_t joint_parents[19] = {255, 0, 1, 2, 3, 2, 5, 6, 7, 2, 9, 10, 11, 0, 13, 14, 0, 16, 17};
 
-// Clips of a PW PSP motion archive as one PO Mtar. A PW archive may declare
+// Clips of PW PSP motion archives as one PO Mtar. A PW archive may declare
 // more joints than a clip animates (enedam declares 38, its clips use the
 // first 19); each clip must animate exactly PO's joints in PO's order and
-// hierarchy. PO indexes joints implicitly, so the clip's two PW byte tables
-// are dropped and its header, offset table and compressed tracks are kept
-// byte for byte. PW's separate effector data is not carried over.
+// hierarchy. A weapon's upper-body clip (kind 0x10436) differs in one place:
+// its joint 1 has no parent, the upper body held apart from the hips, as the
+// kind's 0x10000 bit says wherever it occurs. PO indexes joints implicitly,
+// so the clip's two PW byte tables are dropped and its header (kind
+// included), offset table and compressed tracks are kept byte for byte. PW's
+// separate effector data is not carried over.
 // Wide: clip table records are {u64 offset, u64 size, ...}, 32 bytes.
-inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::uint32_t> clips, bool wide = false) {
+using Clip = std::pair<std::span<const std::uint8_t>, std::uint32_t>;  // archive, clip
+inline Bytes mtar(std::span<const Clip> clips, bool wide = false) {
     constexpr std::uint32_t joints = 19, head = 64 + joints * 4;
     const std::uint64_t record = wide ? 32 : 16;
-    const std::uint32_t declared = get(pw, 8, 2), motions = get(pw, 10, 2), body = get(pw, 16), table = get(pw, 28);
-    if (get(pw, 0) != 0x7261744du || get(pw, 12) != 0x10000u || declared < joints)
-        throw std::runtime_error("Unsupported PW motion archive");
     std::vector<Bytes> blocks;
-    for (auto clip : clips) {
+    for (const auto &[pw, clip] : clips) {
+        const std::uint32_t declared = get(pw, 8, 2), motions = get(pw, 10, 2), body = get(pw, 16), table = get(pw, 28);
+        if (get(pw, 0) != 0x7261744du || get(pw, 12) != 0x10000u || declared < joints)
+            throw std::runtime_error("Unsupported PW motion archive");
         if (clip >= motions) throw std::runtime_error("PW motion archive lacks a clip");
         const std::uint64_t at = std::uint64_t(body) + get(pw, table + clip * record),
                             size = get(pw, table + clip * record + (wide ? 8 : 4));
         if (size < head + joints * 2 || at + size > pw.size()) throw std::runtime_error("PW clip is outside its archive");
         const auto block = pw.subspan(at, size);
         const std::uint32_t kind = get(block, 4), tracks = get(block, 16), units = get(block, 20);
-        if ((kind != 0x36u && kind != 0x436u) || get(block, 8) != 5 || !get(block, 12) || get(block, 24) != joints ||
-            get(block, 0x2e, 2) != head || tracks != head + joints * 2 || std::uint64_t(tracks) + units * 2ull > size)
+        const bool upper = kind == 0x10436u;
+        if ((kind != 0x36u && kind != 0x436u && !upper) || get(block, 8) != 5 || !get(block, 12) ||
+            get(block, 24) != joints || get(block, 0x2e, 2) != head || tracks != head + joints * 2 ||
+            std::uint64_t(tracks) + units * 2ull > size)
             throw std::runtime_error("PW clip has an unsupported encoding or layout");
         for (std::uint32_t joint = 0; joint < joints; ++joint)
-            if (block[head + joint] != joint || block[head + joints + joint] != joint_parents[joint] ||
+            if (block[head + joint] != joint ||
+                block[head + joints + joint] != (upper && joint == 1 ? 255 : joint_parents[joint]) ||
                 get(block, 64 + joint * 4) > units)
                 throw std::runtime_error("PW clip does not animate PO's skeleton");
         for (std::uint32_t tail = 0; tail < 4; ++tail)
@@ -368,6 +375,11 @@ inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::u
     out.resize(body_at);
     for (const auto &block : blocks) out.insert(out.end(), block.begin(), block.end());
     return out;
+}
+inline Bytes mtar(std::span<const std::uint8_t> pw, std::initializer_list<std::uint32_t> clips, bool wide = false) {
+    std::vector<Clip> list;
+    for (auto clip : clips) list.push_back({pw, clip});
+    return mtar(list, wide);
 }
 // The whole converted bundle from a PW source, as file name -> bytes. Models,
 // packs and the lift motion are required; a sound bank or the placement

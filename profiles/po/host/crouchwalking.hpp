@@ -22,38 +22,52 @@ constexpr std::uint32_t engine = 0x08804000u, decision = engine + 0x10174cu;
 constexpr std::uint32_t idle = engine + 0x10174cu, locomotion = engine + 0x105564u;
 constexpr std::uint32_t archive_hash = 0x700e98u;
 constexpr std::uint32_t blend_ticks = 35u; // PO's default full-body transition (state +0x28).
-inline bool selected = false, available = false, enabled = false;
+// With the Mk22 out, PO's upper layer (channel +0x80) plays sna_wp_mk22, whose
+// crouch idle arms look wrong over walking legs. PW's Mk.22 (level 1, SLOT
+// key below) has an upper body for each gait, clips 8 and 6, as long as the
+// loops; they become converted clips 2 and 3, on layer 1 with PO's upper mask.
+constexpr std::uint32_t mk22_po = 0x4c4af2u, mk22_pw = 0x08dc2535u, upper_mask = 0x1ffeu;
+inline bool selected = false, available = false, enabled = false, has_upper = false;
+inline bool upper_imported = false;  // the installed archive has the Mk.22's clips
 inline std::string status;
 inline Bytes bytes;
 inline std::uint32_t resource = 0, owner = 0, state = 0, motion = 0, channel = 0;
 inline std::array<std::uint32_t, 3> saved{};
-inline int old_clip = 0, playing = -1;
-inline bool attempted = false, inner = false;
+inline std::array<std::uint32_t, 2> saved_upper{};  // layer 1's archive and its hash
+inline int old_clip = 0, old_upper = -1, playing = -1;
+inline bool attempted = false, inner = false, upper_ours = false;
 inline Runtime::RecompiledFunction original = nullptr, original_stage = nullptr;
+inline Runtime::RecompiledFunction original_request = nullptr, original_release = nullptr;
 inline GuestWrap movement;
 
 inline std::filesystem::path directory() {
     return portablekit::install::user_data_directory() / "pw" / "crouchwalking";
 }
 
+// The converted clips: the normal and slow gaits, then, from an import that
+// found them, the Mk.22's upper body for each.
+struct Expected { std::uint32_t name, kind, frames; };
+constexpr Expected expected[4] = {
+    {0x1c60c2u, 0x436u, 40}, {0x4c0730u, 0x436u, 112}, {0x29b93du, 0x10436u, 40}, {0x7db0acu, 0x10436u, 112}};
+
 inline bool valid(std::span<const std::uint8_t> data) {
     try {
         using fulton_convert::get;
         if (data.size() > 65536 || get(data, 0) != 0x7261744du || get(data, 4) != 19 ||
-            get(data, 8) != 2 || get(data, 16) != 0x10000) return false;
-        const std::uint32_t body = get(data, 12);
-        if (body < 208 || body > data.size()) return false;
+            (get(data, 8) != 2 && get(data, 8) != 4) || get(data, 16) != 0x10000) return false;
+        const std::uint32_t count = get(data, 8), body = get(data, 12);
+        if (body < 184 + count * 8 || body > data.size()) return false;
         for (unsigned joint = 0; joint < 19; ++joint) {
             const auto parent = fulton_convert::joint_parents[joint];
             if (get(data, 32 + joint * 4) != fulton_convert::joint_names[joint] ||
                 get(data, 108 + joint * 4) != (parent == 255 ? 0u : fulton_convert::joint_names[parent])) return false;
         }
-        for (unsigned i = 0; i < 2; ++i) {
+        for (unsigned i = 0; i < count; ++i) {
             const std::uint64_t at = std::uint64_t(body) + get(data, 184 + i * 8);
             const std::uint32_t size = get(data, 188 + i * 8);
             if (at + size > data.size() || size < 140 ||
-                get(data, at) != (i ? 0x4c0730u : 0x1c60c2u) || get(data, at + 4) != 0x436 ||
-                get(data, at + 8) != 5 || get(data, at + 12) != (i ? 112u : 40u) ||
+                get(data, at) != expected[i].name || get(data, at + 4) != expected[i].kind ||
+                get(data, at + 8) != 5 || get(data, at + 12) != expected[i].frames ||
                 get(data, at + 24) != 19 || get(data, at + 16) != 140 ||
                 140ull + get(data, at + 20) * 2ull > size) return false;
             for (unsigned joint = 0; joint < 19; ++joint)
@@ -75,8 +89,14 @@ inline Bytes read(const std::filesystem::path &file) {
 }
 
 inline void refresh() {
-    try { read(directory() / "crouchwalk.mtar"); available = true; status = "Assets installed"; }
-    catch (const std::exception &) { available = false; status = "Converted crouchwalk assets required"; }
+    try {
+        upper_imported = fulton_convert::get(read(directory() / "crouchwalk.mtar"), 8) == 4;
+        available = true;
+        status = "Assets installed";
+    } catch (const std::exception &) {
+        available = upper_imported = false;
+        status = "Converted crouchwalk assets required";
+    }
 }
 
 inline void save(bool value) {
@@ -92,15 +112,25 @@ inline std::string import(const std::filesystem::path &chosen) {
     try {
         Bytes converted;
         const auto extract = [&converted](const pw_slot::Source &source) {
+            Bytes coop;
             pw_slot::stage_files(source, [&](std::string_view name, std::span<const std::uint8_t> data) {
                 if (name != "snake_coop.mtar" || !converted.empty()) return !converted.empty();
                 try {
                     auto candidate = fulton_convert::mtar(data, {7, 6}, source.wide);
-                    if (valid(candidate)) converted = std::move(candidate);
+                    if (valid(candidate)) converted = std::move(candidate), coop.assign(data.begin(), data.end());
                 } catch (const std::runtime_error &) {}
                 return !converted.empty();
             });
             if (converted.empty()) throw std::runtime_error("PW source lacks supported crouchwalk loops");
+            // The Mk.22's upper body for both gaits, when the source has it.
+            try {
+                const auto found = pw_slot::extract(source, std::array{mk22_pw});
+                if (const auto mk22 = found.find(mk22_pw); mk22 != found.end()) {
+                    const fulton_convert::Clip clips[] = {{coop, 7}, {coop, 6}, {mk22->second, 8}, {mk22->second, 6}};
+                    auto with = fulton_convert::mtar(clips, source.wide);
+                    if (valid(with)) converted = std::move(with);
+                }
+            } catch (const std::runtime_error &) {}
         };
         if (std::filesystem::is_directory(chosen)) {
             if (std::filesystem::is_regular_file(chosen / "crouchwalk.mtar"))
@@ -133,13 +163,22 @@ inline std::string import(const std::filesystem::path &chosen) {
 
 inline void reset_stage() {
     resource = owner = state = motion = channel = 0;
-    attempted = false;
+    attempted = upper_ours = false;
     playing = -1;
 }
 
 inline bool owns(const psprecomp::GuestMemory &memory) {
     return playing >= 0 && memory.contains(motion, 8) && memory.contains(channel, 0x80) &&
            memory.load32(motion + 4) == channel && memory.load32(channel + 0x48) == archive_hash;
+}
+
+// Layer 1's own archive back, as far as it still holds ours.
+inline void restore_upper(psprecomp::GuestMemory &memory) {
+    if (upper_ours && memory.contains(channel, 0x100)) {
+        if (memory.load32(channel + 0x84) == resource) memory.store32(channel + 0x84, saved_upper[0]);
+        if (memory.load32(channel + 0xc8) == archive_hash) memory.store32(channel + 0xc8, saved_upper[1]);
+    }
+    upper_ours = false;
 }
 
 inline void restore(psprecomp::GuestMemory &memory) {
@@ -149,7 +188,23 @@ inline void restore(psprecomp::GuestMemory &memory) {
         for (unsigned i = 0; i < 3; ++i)
             if (memory.load32(at[i]) == mine[i]) memory.store32(at[i], saved[i]);
     }
+    restore_upper(memory);
     playing = -1;
+}
+
+// The game asking for layer 1 (a request or a release, as when it aims or
+// draws) gets its archive back first, so its clip index means its own clip.
+inline void hand_back_upper(psprecomp::CorpusRuntime &corpus, Context &ctx) {
+    if (upper_ours && !fulton_visuals::selecting_motion && ctx.gpr[4] == motion && ctx.gpr[5] == 1u)
+        restore_upper(static_cast<Runtime &>(corpus).memory());
+}
+inline void request(psprecomp::CorpusRuntime &corpus, Context &ctx) {
+    hand_back_upper(corpus, ctx);
+    original_request(corpus, ctx);
+}
+inline void release(psprecomp::CorpusRuntime &corpus, Context &ctx) {
+    hand_back_upper(corpus, ctx);
+    original_release(corpus, ctx);
 }
 
 inline void prepare(Runtime &runtime, Context &ctx, Resume next) {
@@ -171,18 +226,23 @@ inline void prepare(Runtime &runtime, Context &ctx, Resume next) {
         });
 }
 
-inline void start(Context &ctx, std::uint32_t block, int clip) {
+inline void start(Context &ctx, std::uint32_t block, int clip, std::uint32_t layer = 0, Resume next = {}) {
     // Match component 0x1676C: start the clip, then snapshot the previous
     // evaluated pose and blend it with 0x7F69C. The start offset is not a blend.
+    // The upper layer takes the upper mask in both, as the game's own requests do.
     // Not the game's own request: Fulton must not replay it at its hand-back,
     // which would put the walking loop back on with nothing to stop it.
+    const std::uint32_t mask = layer ? upper_mask : 0x7ffffu;
     fulton_visuals::selecting_motion = true;
     portablekit::hle_extension::call_guest(ctx, engine + 0x7f264u,
-        {block, 0u, std::uint32_t(clip), 0u, 0x7ffffu, 0u},
-        [block](auto &started, std::uint32_t) {
+        {block, layer, std::uint32_t(clip), 0u, mask, 0u},
+        [block, mask, layer, next](auto &started, std::uint32_t) {
             portablekit::hle_extension::call_guest(started, engine + 0x7f69cu,
-                {block, blend_ticks, 0x7ffffu, 0u, 0u},
-                [](auto &, std::uint32_t) { fulton_visuals::selecting_motion = false; });
+                {block, blend_ticks, mask, 0u, layer},
+                [next](auto &blended, std::uint32_t) {
+                    fulton_visuals::selecting_motion = false;
+                    if (next) next(blended);
+                });
         });
 }
 
@@ -202,8 +262,21 @@ inline void play(Runtime &runtime, Context &ctx, std::uint32_t player, int clip)
     memory.store32(channel + 4, resource);
     memory.store32(channel + 0x48, archive_hash);
     playing = clip;
-    std::cout << "[crouchwalk] " << (clip ? "slow" : "normal") << " loop" << std::endl;
-    start(ctx, motion, clip);
+    const bool mk22 = has_upper && (upper_ours || memory.load32(channel + 0xc8) == mk22_po);
+    std::cout << "[crouchwalk] " << (clip ? "slow" : "normal") << " loop" << (mk22 ? ", Mk22 upper body" : "")
+              << std::endl;
+    start(ctx, motion, clip, 0, [&runtime, clip, mk22](Context &next) {
+        if (!mk22) return;
+        auto &memory = runtime.memory();
+        if (!upper_ours) {
+            saved_upper = {memory.load32(channel + 0x84), memory.load32(channel + 0xc8)};
+            old_upper = int(memory.load32(channel + 0x80));
+            upper_ours = true;
+        }
+        memory.store32(channel + 0x84, resource);
+        memory.store32(channel + 0xc8, archive_hash);
+        start(next, motion, clip + 2, 1);
+    });
 }
 
 inline void crouch_decision(psprecomp::CorpusRuntime &corpus, Context &ctx) {
@@ -229,9 +302,13 @@ inline void crouch_decision(psprecomp::CorpusRuntime &corpus, Context &ctx) {
                             auto &memory = runtime.memory();
                             memory.store16(player + 0x730, first); memory.store16(player + 0x73c, second);
                             if (memory.load32(work + 0x34) != idle || strength < 0x28u || strength > 255u) {
-                                const bool was_ours = owns(memory), staying = memory.load32(work + 0x34) == idle;
+                                const bool was_ours = owns(memory), was_upper = upper_ours,
+                                           staying = memory.load32(work + 0x34) == idle;
                                 restore(memory);
-                                if (was_ours && staying && old_clip >= 0) start(after, motion, old_clip);
+                                if (was_ours && staying && old_clip >= 0)
+                                    start(after, motion, old_clip, 0, [was_upper](Context &next) {
+                                        if (was_upper && old_upper >= 0) start(next, motion, old_upper, 1);
+                                    });
                                 return;
                             }
                             // Fulton has the motion; its hand-back returns it.
@@ -297,6 +374,15 @@ inline void install(Runtime &runtime) {
     }
     runtime.register_function(decision, &crouch_decision, "po_crouchwalk_decision");
     fulton_visuals::release_player_motion = [](psprecomp::GuestMemory &memory) { restore(memory); };
-    std::cout << "[crouchwalk] enabled" << std::endl;
+    // An archive imported with the Mk.22's upper body, and the clip request
+    // and release to hand layer 1 back through (after Fulton's, if it has them).
+    has_upper = fulton_convert::get(bytes, 8) == 4;
+    original_request = runtime.registered_function(engine + 0x7f264u);
+    original_release = runtime.registered_function(engine + 0x7f634u);
+    if (has_upper && original_request && original_release) {
+        runtime.register_function(engine + 0x7f264u, &request, "po_crouchwalk_motion_request");
+        runtime.register_function(engine + 0x7f634u, &release, "po_crouchwalk_motion_release");
+    } else has_upper = false;
+    std::cout << "[crouchwalk] enabled" << (has_upper ? " with the Mk22 upper body" : "") << std::endl;
 }
 } // namespace mgs::crouchwalking
