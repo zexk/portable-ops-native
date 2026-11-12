@@ -172,6 +172,12 @@ inline bool owns(const psprecomp::GuestMemory &memory) {
            memory.load32(motion + 4) == channel && memory.load32(channel + 0x48) == archive_hash;
 }
 
+// First person (action flag 0xBA or 7) keeps the game's own upper body, which
+// frames the weapon; PW's walking arms swing it across the view.
+inline bool first_person(psprecomp::GuestMemory &memory, std::uint32_t player) {
+    return action(memory, player, 0xbau) || action(memory, player, 7u);
+}
+
 // Layer 1's own archive back, as far as it still holds ours.
 inline void restore_upper(psprecomp::GuestMemory &memory) {
     if (upper_ours && memory.contains(channel, 0x100)) {
@@ -262,7 +268,8 @@ inline void play(Runtime &runtime, Context &ctx, std::uint32_t player, int clip)
     memory.store32(channel + 4, resource);
     memory.store32(channel + 0x48, archive_hash);
     playing = clip;
-    const bool mk22 = has_upper && (upper_ours || memory.load32(channel + 0xc8) == mk22_po);
+    const bool mk22 = has_upper && !first_person(memory, player) &&
+                      (upper_ours || memory.load32(channel + 0xc8) == mk22_po);
     std::cout << "[crouchwalk] " << (clip ? "slow" : "normal") << " loop" << (mk22 ? ", Mk22 upper body" : "")
               << std::endl;
     start(ctx, motion, clip, 0, [&runtime, clip, mk22](Context &next) {
@@ -313,6 +320,12 @@ inline void crouch_decision(psprecomp::CorpusRuntime &corpus, Context &ctx) {
                             }
                             // Fulton has the motion; its hand-back returns it.
                             if (fulton_visuals::holds(memory.load32(player + 0x1e8u))) return;
+                            // Into first person while walking: the game's upper body again.
+                            if (upper_ours && first_person(memory, player)) {
+                                restore_upper(memory);
+                                if (old_upper >= 0) start(after, motion, old_upper, 1);
+                                return;
+                            }
                             prepare(runtime, after, [&runtime, player, yaw](auto &ready) {
                                 if (!resource) return;
                                 auto &memory = runtime.memory();
