@@ -206,6 +206,10 @@ def zar_files(zar):
 
 def main():
     edition, disc, out = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
+    # Online play loads stages above the network modules: BASE and the stages.
+    if len(sys.argv) > 4:
+        EDITIONS[edition]['stage'] = int(sys.argv[4], 16)
+    only = set(sys.argv[5:])
     out.mkdir(parents=True, exist_ok=True)
     image, files = iso_files(disc)
 
@@ -215,7 +219,7 @@ def main():
         return image.read(size)
 
     stages = sorted(path.split('/')[-2] for path in files if path.startswith('/psp_game/usrdir/stage/') and path.endswith('.prx'))
-    for stage in stages:
+    for stage in (s for s in stages if not only or s in only):
         folder = '/psp_game/usrdir/stage/%s/' % stage
         rlc = zar_files(read(folder + '_zar')).get(stage + '.rlc', b'')
         prx = read(folder + stage + '.prx')

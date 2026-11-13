@@ -49,6 +49,18 @@ cmake -S . -B out/po
 cmake --build out/po -j2
 ```
 
+Online play keeps `r_net01` loaded, so the stages after it load higher: PO+
+NA 1.01 loads `ntmenu2`, the `n*` maps and the online menus at `0x08B9CC00`
+(seen live on 2026-11-13). Pass that base and the stages after the output
+folder:
+
+```sh
+python3 scripts/stage-images.py pop /path/to/pop.iso out/stages-pop-online 0x08B9CC00 \
+    ntmenu2 n01 n01kai ... n25 editmsg browser apscan gpstest
+```
+
+PO's online base has not been observed yet.
+
 Capture other loaded modules during play, then compile the dumps:
 
 ```sh
