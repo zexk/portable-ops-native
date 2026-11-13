@@ -529,8 +529,9 @@ the update and its swing helper sit in different 16 KiB units of the stage
 module, so the recompiled update returned to the wrapper before the swing
 ran and the rule was already restored. The wrapper now restores the rule
 when the guest function returns (`GuestWrap`, as the look hook does). The
-user confirmed follow off and on in that mission. PO now runs through the
-same wrapper and needs a recheck; other platforms remain unverified live.
+user confirmed follow off and on in that mission. PO runs through the same
+wrapper; the user confirmed its toggle again the same day. Other platforms
+remain unverified live.
 
 ## 17. Thermal and night-vision goggles
 
