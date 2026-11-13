@@ -267,9 +267,11 @@ gave 21000/36000 in place of 7000/12000. The same setting scales the foot
 shadow fade (floats `0x1EA680`/`0x1EA684`, 5000 and 10000 units, used only
 by update `0x14F70C`), written at the same moment. Live, 2026-11-11: 400%
 read back 20000/40000 and soldiers up to 39000 units away kept shadows.
-PO+ (US, EU, JP) wraps its own copy of the handler; the wrap installs at
-boot, but no PO+ stage has been checked for the effect. PO's shadow update
-is not in the PO+ engine, so PO+ has no shadow fade scaling.
+PO+ wraps its own copy of the LOD handler; the wrap installs at boot, but
+its gameplay effect still needs live verification. US 1.01 now also finds
+contact-shadow fade constants in each stage module and scales them at load.
+Offline checks pass for gsmenu, n01, bossrush01pt and briefing; live shadow
+verification is pending. See [PO/PO+ crosscheck](po-pop-parity.md).
 ## 13. Achievements
 
 Achievements and RetroAchievements support are planned for the next release.
@@ -519,8 +521,16 @@ dumps containing the old swing signature; six other US dumps and the
 local EU/JP dumps matched neither signature. Follow toggling, manual
 orbit, recentre and rule restoration pass the stand-in runtime check in
 `scripts/test-camera.cpp`. The user confirmed the fix works in PO on
-Linux with both response settings enabled. PO+ and other platforms remain
-unverified live.
+Linux with both response settings enabled.
+
+PO+ US 1.01, 2026-11-13: disabling follow had no effect in an EASY mission
+(trneko0900). The hook installed and zeroed the rule on every update, but
+the update and its swing helper sit in different 16 KiB units of the stage
+module, so the recompiled update returned to the wrapper before the swing
+ran and the rule was already restored. The wrapper now restores the rule
+when the guest function returns (`GuestWrap`, as the look hook does). The
+user confirmed follow off and on in that mission. PO now runs through the
+same wrapper and needs a recheck; other platforms remain unverified live.
 
 ## 17. Thermal and night-vision goggles
 
