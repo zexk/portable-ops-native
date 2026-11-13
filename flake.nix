@@ -31,6 +31,9 @@
           ];
           # PortableKit builds FFmpeg itself by default; use the system one.
           PORTABLEKIT_FFMPEG = "system";
+          # One edition's objects are about 2 GiB; ccache's 5 GiB default
+          # evicted them between builds.
+          CCACHE_MAXSIZE = "15G";
         };
       });
 
