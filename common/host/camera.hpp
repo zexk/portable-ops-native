@@ -363,6 +363,12 @@ template <typename ShapeOf>
     return found;
 }
 
+// The player's input step lives in each stage module: the shape of its first
+// twelve instructions, the same in every release.
+inline constexpr std::uint32_t kPopPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060000u, 0x24070000u,
+                                               0xafb10000u, 0x00a08821u, 0x24050000u, 0xafb00000u,
+                                               0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
+
 // PO+ keeps the player's code in each stage module, at a different place in
 // each: the input step is found by the shape of its first instructions, and
 // only where exactly one place has it.
@@ -385,28 +391,34 @@ inline void install_camera_in_module(psprecomp::Runtime &runtime, std::uint32_t 
 // player put it and the button still recentres it. Wrap the actor's update,
 // not its swing helper: generated same-unit calls bypass registered helpers.
 struct CameraFollowState {
-    psprecomp::Runtime::RecompiledFunction update = nullptr;
+    GuestWrap update;
 };
 inline CameraFollowState camera_follow_state;
 
+// The update leaves its unit before it returns (PO+ keeps the swing in
+// another unit of the stage module), so the rule is restored when the guest
+// function has really returned, not when the first unit hands control back.
 inline void camera_update(psprecomp::CorpusRuntime &rt, psprecomp::AllegrexContext &ctx) {
+    auto &update = camera_follow_state.update;
+    if (update.inner) {
+        update.around(rt, ctx, {});
+        return;
+    }
     if (portablekit::settings::current().camera_follow) {
-        camera_follow_state.update(rt, ctx);
+        update.original(rt, ctx);
         return;
     }
     auto &memory = static_cast<psprecomp::Runtime &>(rt).memory();
     const std::uint32_t rule = ctx.gpr[4] + 0x68u;
     const std::uint32_t stage_rule = memory.load32(rule);
     memory.store32(rule, 0u);
-    camera_follow_state.update(rt, ctx);
-    memory.store32(rule, stage_rule);
+    update.around(rt, ctx, [rule, stage_rule](psprecomp::Runtime &runtime, std::uint32_t) {
+        runtime.memory().store32(rule, stage_rule);
+    });
 }
 
 inline void install_camera_follow(psprecomp::Runtime &runtime, std::uint32_t update) {
-    const psprecomp::Runtime::RecompiledFunction original = runtime.registered_function(update);
-    if (original == nullptr || original == &camera_update) return;
-    camera_follow_state.update = original;
-    runtime.register_function(update, &camera_update, "mgs_camera_update");
+    if (!camera_follow_state.update.install(runtime, update, &camera_update, "mgs_camera_update")) return;
     std::cout << "[camera-follow] the camera's follow rule is controlled at update 0x" << std::hex
               << update << std::dec << std::endl;
 }
