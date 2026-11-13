@@ -179,5 +179,8 @@ out/pop/bin/mpo-server --data out/server-data --web-port 8080 \
 MGSPOP_ONLINE_SERVER=127.0.0.1:8080 out/pop/bin/PortableOpsPlusNative
 ```
 
-`--game` supplies the defaults file required by the client. See `mpo-server --help`
+The game sends names in capitals and wants passwords of at least 6 characters:
+`adduser` stores both names in capitals, refuses shorter passwords, and login
+matches names regardless of case. `--game` supplies the defaults file required
+by the client. See `mpo-server --help`
 for server options and [PROTOCOL.md](../server/PROTOCOL.md) for the protocol.

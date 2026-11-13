@@ -23,6 +23,7 @@
 #include <ws2tcpip.h>
 #include <direct.h>
 #define strncasecmp _strnicmp
+#define strcasecmp _stricmp
 #define make_dir(path) _mkdir(path)
 typedef SOCKET sock_t;
 typedef int socklen_t;
@@ -386,14 +387,20 @@ static void load_accounts(void) {
     fclose(f);
 }
 
-static int add_user(const char *name, const char *password, const char *player) {
-    if (strlen(name) > 16 || strlen(password) > 64 || strlen(player) > 16 ||
-        strpbrk(name, "\t\r\n") || strpbrk(password, "\t\r\n") || strpbrk(player, "\t\r\n")) {
-        fprintf(stderr, "names are at most 16 characters, passwords 64, without tabs\n");
+static int add_user(const char *login, const char *password, const char *nickname) {
+    if (strlen(login) > 16 || strlen(password) < 6 || strlen(password) > 64 || strlen(nickname) > 16 ||
+        strpbrk(login, "\t\r\n") || strpbrk(password, "\t\r\n") || strpbrk(nickname, "\t\r\n")) {
+        fprintf(stderr, "names are at most 16 characters, passwords 6 to 64, without tabs\n");
         return 1;
     }
+    /* The game's keyboard sends names in capitals. */
+    char name[17], player[17];
+    for (size_t i = 0; i <= strlen(login); i++)
+        name[i] = (char)toupper((unsigned char)login[i]);
+    for (size_t i = 0; i <= strlen(nickname); i++)
+        player[i] = (char)toupper((unsigned char)nickname[i]);
     for (int i = 0; i < user_count; i++)
-        if (!strcmp(users[i].name, name)) {
+        if (!strcasecmp(users[i].name, name)) {
             printf("exists %s\n", name);
             return 1;
         }
@@ -651,7 +658,7 @@ static int account(client_t *c, uint16_t command, const uint8_t *payload, size_t
         memcpy(name, plain, 16);
         user_t *user = NULL;
         for (int i = 0; i < user_count && !user; i++)
-            if (!strcmp(users[i].name, name))
+            if (!strcasecmp(users[i].name, name))
                 user = &users[i];
         if (user)
             hmac_md5(expected, name, strlen(name), c->challenge, c->challenge_length,
