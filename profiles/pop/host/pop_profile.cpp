@@ -106,12 +106,6 @@ constexpr std::span<const OtherGameSaves> kPortableOpsSaves{kPortableOpsSaveFold
 
 constexpr mgs::SaveMpoMark kSaveMpoMark{kBase + kRelease.append_u32, kBase + kRelease.join_return};
 
-// The player's input step lives in each stage module: the shape of its first
-// twelve instructions, the same in every release.
-constexpr std::uint32_t kPlayerInputShape[] = {0x27bd0000u, 0xafb40000u, 0x24060000u, 0x24070000u,
-                                               0xafb10000u, 0x00a08821u, 0x24050000u, 0xafb00000u,
-                                               0x00808021u, 0xafbf0000u, 0xafb60000u, 0xafb50000u};
-
 // Where sound2 loads in each release, and its three master levels
 // (sound_levels.hpp). The voices, the catalogue pointer and the bank count
 // sit at the same distances from the masters in all three; the code is at
@@ -143,8 +137,11 @@ constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + kSound2Data + 0x1DCu,
 void module_code_ready(psprecomp::Runtime &runtime, std::string_view name, std::uint32_t base,
                        std::span<const std::uint8_t> code) {
     if (name != "mgp_stage") return;
+#if !defined(MGS_REGION_EU) && !defined(MGS_REGION_JP)
+    mgs::detail_distance::shadow_in_module(runtime, code);
+#endif
     mgs::boot_skip::module_ready(runtime, name, base, code);
-    mgs::install_camera_in_module(runtime, base, code, kPlayerInputShape, kBase + kRelease.action_flags,
+    mgs::install_camera_in_module(runtime, base, code, mgs::kPopPlayerInputShape, kBase + kRelease.action_flags,
                                   kBase + kRelease.pad, kBase + kRelease.globals,
                                   kBase + kRelease.set_action);
     mgs::install_camera_follow_in_module(runtime, base, code);
@@ -156,7 +153,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::install_savempo_mark(runtime, kSaveMpoMark);
     mgs::install_widescreen(runtime, {kBase + kRelease.build_view, kBase + kRelease.x_scale});
     mgs::presence::install(runtime, kBase + kRelease.stage_request);
-    // No foot shadow fade: PO's shadow update is not in this engine.
+    // Shadow constants are discovered separately in each US stage module.
     mgs::detail_distance::install(runtime, kBase + kRelease.register_lod, kBase + kRelease.lod_table, 0u);
     // The bank pointer is the word after the globals' two; the return word is var 0x3E4.
     mgs::boot_skip::install(runtime, {kBase + kRelease.call_procedure, kBase + kRelease.globals + 8u, true, 0x3E4u,
