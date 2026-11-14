@@ -6,11 +6,13 @@
 // A soldier perceives through two components of its stage's sensor code: a
 // vision cone and a hearing sphere, pointed to from its work (actor + 0x40)
 // at +0x1B98 and +0x1B9C. The cone's sight distance is the int at +0x48
-// (option 'i', 20000 when absent; an area manager may set it again from a
+// (option 'i': mission scripts pass 10000, 12000 or 16000 by the game's own
+// difficulty, 20000 when absent; an area manager may set it again from a
 // table), its half-angles the s16 at +0x50 (sideways) and +0x54 (up and
-// down), 0x2000 (45 degrees) by default; the AI keeps its own adjustments
-// beside them (+0x4C, +0x52, +0x56). The sphere's radius is the int at +0x44
-// (option 'h', 10000 when absent), its adjustment at +0x48; the hearing check
+// down), 0x2000 (45 degrees) at every difficulty; the AI keeps its own
+// adjustments beside them (+0x4C, +0x52, +0x56). The sphere's radius is the
+// int at +0x44 (option 'h': 6000, 6000 or 8000; 10000 when absent), its
+// adjustment at +0x48; the hearing check
 // doubles or caps it by the kind of noise. Work +0x194C holds the base sight
 // distance (option 'd', else a copy of +0x48).
 //
