@@ -138,7 +138,10 @@ inline void draw() {
         browse.empty_note = "No folders or disc images here.";
         browse.choose_folder = "Import from this folder";
         browse.choose_on_open = [](const std::filesystem::path &folder) {
-            return std::filesystem::is_regular_file(folder / "crouchwalk.mtar");
+            // Not the throwing overload: a folder whose contents cannot be
+            // read (Windows' WpSystem) is listed, not an error (issue #1).
+            std::error_code error;
+            return std::filesystem::is_regular_file(folder / "crouchwalk.mtar", error);
         };
         browser = std::make_unique<FileBrowser>(FileBrowser::home(), std::move(browse));
     }
