@@ -8,7 +8,7 @@
 #include "boot_skip.hpp"
 #include "crouchwalking.hpp"
 #include "detail_distance.hpp"
-#include "enemy_senses.hpp"
+#include "difficulty.hpp"
 #include "fulton.hpp"
 #include "fulton_audio_catalog.hpp"
 #include "fulton_settings.hpp"
@@ -54,6 +54,10 @@ constexpr mgs::quick_equip::Addresses kQuickEquip{
     kEngine + 0x90C04u, kEngine + 0x93150u, kEngine + 0x91768u,  kEngine + 0x94B7Cu, kEngine + 0x93970u,
     kEngine + 0x93D0Cu, kEngine + 0xCE624u, kEngine + 0xDC7Cu};
 
+// The link bank, its snapshot and the copies between them (difficulty.hpp).
+constexpr mgs::difficulty::Addresses kDifficulty{kEngine + 0x1F11D0u, kEngine + 0x2228D8u, kEngine + 0x3E73Cu,
+                                                 kEngine + 0x3F194u, kEngine + 0x3E8D8u};
+
 // Sounds whose flags do not say what they are (sound_levels.hpp).
 //
 // A cutscene's streams (the oss_ banks) carry cue categories 0xC8 speech,
@@ -96,6 +100,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u, 0x08804000u + 0x1EA680u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
     mgs::quick_equip::install(runtime, kQuickEquip);
+    mgs::difficulty::install(runtime, kDifficulty);
     mgs::boot_skip::install(runtime, {0x08804000u + 0x3DF48u, 0x08804000u + 0x220CD8u, false, 0x120u, 232u,
                                       0x2F058u, 0x2EF78u, 0x2EDDCu});
 }
@@ -152,14 +157,14 @@ const GameProfile &game() {
                 mgs::fulton::module_ready(runtime, name, base, code);
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
-                mgs::enemy_senses::module_ready(runtime, name, base, code);
+                mgs::difficulty::module_ready(runtime, name);
             },
         .draw_game_settings =
             +[] {
                 mgs::boot_skip::draw();
                 mgs::analog_stalk::draw();
                 mgs::quick_equip::draw();
-                mgs::enemy_senses::draw();
+                mgs::difficulty::draw();
                 mgs::fulton_settings::draw();
             },
         .reset_game_settings =
@@ -167,7 +172,7 @@ const GameProfile &game() {
                 mgs::boot_skip::reset();
                 mgs::analog_stalk::reset();
                 mgs::quick_equip::reset();
-                mgs::enemy_senses::reset();
+                mgs::difficulty::reset();
                 mgs::fulton_settings::reset();
             },
         .draw_audio_settings = &mgs::sound_levels::draw,
