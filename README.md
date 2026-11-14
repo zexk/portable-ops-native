@@ -60,6 +60,11 @@ four inventory slots: a direction equips that slot without the item wheel.
 Holding a direction, L drops the slot's item and R sends it to base with a
 soldier who can deliver. The D-pad no longer turns the camera.
 
+**Game > Difficulty > Enemy senses** (PO, Normal by default) makes soldiers
+see and hear further and look wider: Hard by half again (a quarter wider),
+Extreme twice as far (half again as wide). It applies from the next area
+loaded and is not yet checked in a mission.
+
 **Audio > Mix** has levels for music, effects and voices, all at 100% by
 default; PO adds one for cutscenes. They scale the game's own mix, under
 **Audio > Master**. Grunts, radio calls and speech the game leaves unmarked

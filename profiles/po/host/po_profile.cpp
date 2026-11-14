@@ -8,6 +8,7 @@
 #include "boot_skip.hpp"
 #include "crouchwalking.hpp"
 #include "detail_distance.hpp"
+#include "enemy_senses.hpp"
 #include "fulton.hpp"
 #include "fulton_audio_catalog.hpp"
 #include "fulton_settings.hpp"
@@ -151,12 +152,14 @@ const GameProfile &game() {
                 mgs::fulton::module_ready(runtime, name, base, code);
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
+                mgs::enemy_senses::module_ready(runtime, name, base, code);
             },
         .draw_game_settings =
             +[] {
                 mgs::boot_skip::draw();
                 mgs::analog_stalk::draw();
                 mgs::quick_equip::draw();
+                mgs::enemy_senses::draw();
                 mgs::fulton_settings::draw();
             },
         .reset_game_settings =
@@ -164,6 +167,7 @@ const GameProfile &game() {
                 mgs::boot_skip::reset();
                 mgs::analog_stalk::reset();
                 mgs::quick_equip::reset();
+                mgs::enemy_senses::reset();
                 mgs::fulton_settings::reset();
             },
         .draw_audio_settings = &mgs::sound_levels::draw,
