@@ -1,8 +1,8 @@
 # First-release gate
 
-Status: `0.1.0-rc1` published 2026-11-08 as a GitHub prerelease: North
-American PO and PO+ on Linux x86-64 and Windows x64, unsigned, with
-checksums and the FFmpeg source. The owner released it with the tested scope
+Status: `0.1.0-rc2` published 2026-11-13 as a GitHub prerelease, after
+`0.1.0-rc1` on 2026-11-08: North American PO and PO+ on Linux x86-64 and
+Windows x64, unsigned, with checksums and the FFmpeg source. The owner released it with the tested scope
 stated; multiplayer is labelled experimental. Hardware requirements and the
 per-artifact acceptance below remain open. Checkboxes below distinguish
 evidence from remaining work.
@@ -57,9 +57,11 @@ file-prefix mappings and rebuild; do not disable the check for publication. Do n
 
 ## Known source-review findings
 
-- Current source manifests contain 94 PO and 153 PO+ overlay identities.
-  Candidate builds must reproduce these exact sets; counts alone are not
-  sufficient, and previous development directories can contain stale modules.
+- Current source manifests contain 185 PO and 299 PO+ overlay identities
+  (rc1 had 94 and 153): every disc stage, and for PO+ the 40 online stage
+  images at their own load base. Candidate builds must reproduce these exact
+  sets; counts alone are not sufficient, and previous development
+  directories can contain stale modules.
 - Recent smoke logs contain short interpreted stage startup sequences before
   recompiled code takes over. Do not claim zero interpretation.
 - The [import audit](release-import-audit.md) identifies six gaps across PO's
@@ -138,6 +140,24 @@ remain local candidates with full acceptance pending. Each distribution
 directory includes checksums and the corresponding FFmpeg source archive;
 final publication review remains
 pending.
+
+The `0.1.0-rc2` candidates were built at port `dcfee68` and PortableKit
+`e10a3db`, incrementally in the rc2 build trees after adding the PO+ online
+stages, and published on 2026-11-13. All four passed the archive checks
+against the recorded inputs (185 PO and 299 PO+ modules) and report
+`v0.1.0-rc2`. In a smoke run each started from its archive (Linux through
+`steam-run`, Windows under Wine), reached the title with no interpreted
+module and ran at full speed. PO+ online (login, hosting, joining) with
+two clients and the packaged `mpo-server` was checked by the user before the
+online stages were added; the online stages were then checked with the same
+setup on a development build. SHA-256:
+
+| Archive | SHA-256 |
+| --- | --- |
+| `portable-ops-native-0.1.0-rc2-linux-x86_64.tar.gz` | `1044c56ee98bf4f85f670e3851aa92b2597838ef5a3fa3a0f76f07dcffe41231` |
+| `portable-ops-plus-native-0.1.0-rc2-linux-x86_64.tar.gz` | `f44a5a8de87db0e7d415322ef664586c4bb4a7ea0436923da0219ffdd5b0da2b` |
+| `PortableOpsNative-0.1.0-rc2-windows-x64.zip` | `e0d32feea55aeb01dd927674bf967838d281d17ddd772e8e28ad50a184272ace` |
+| `PortableOpsPlusNative-0.1.0-rc2-windows-x64.zip` | `f302b713d1625506fb6e0ab2f4526efdce4200c27846ae0e39c9cbdb47915df5` |
 
 ## Per-artifact acceptance (repeat for all four)
 
