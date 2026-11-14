@@ -55,6 +55,11 @@ Both games have **Game > Startup** toggles for skipping the logos and opening
 movie. **Game > Controls > Analog stalking** (off by default) stalks while the
 movement stick is tilted only slightly; it is checked in PO, not yet in PO+.
 
+**Game > Controls > Quick equip** (PO, off by default) gives the D-pad to the
+four inventory slots: a direction equips that slot without the item wheel.
+Holding a direction, L drops the slot's item and R sends it to base with a
+soldier who can deliver. The D-pad no longer turns the camera.
+
 **Audio > Mix** has levels for music, effects and voices, all at 100% by
 default; PO adds one for cutscenes. They scale the game's own mix, under
 **Audio > Master**. Grunts, radio calls and speech the game leaves unmarked

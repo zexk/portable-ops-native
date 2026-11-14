@@ -14,6 +14,7 @@
 #include "interpolation.hpp"
 #include "presence.hpp"
 #include "profile.hpp"
+#include "quick_equip.hpp"
 #include "savempo.hpp"
 #include "settings_defaults.hpp"
 #include "sound_levels.hpp"
@@ -43,6 +44,14 @@ constexpr std::uint32_t kCameraUpdate = 0x08804000u + 0x10D304u;
 
 // The view builder and the x scale it loads.
 constexpr mgs::WidescreenAddresses kWidescreen{0x08804000u + 0x41124u, 0x08804000u + 0x1E5728u};
+
+// The pad update, the item wheel and the calls its commit, drop and send
+// modes make (quick_equip.hpp).
+constexpr std::uint32_t kEngine = 0x08804000u;
+constexpr mgs::quick_equip::Addresses kQuickEquip{
+    kEngine + 0x3CE30u, kEngine + 0x2753DCu, kEngine + 0x24A87Cu, kEngine + 0x1F11D0u, kEngine + 0x2F7060u,
+    kEngine + 0x90C04u, kEngine + 0x93150u, kEngine + 0x91768u,  kEngine + 0x94B7Cu, kEngine + 0x93970u,
+    kEngine + 0x93D0Cu, kEngine + 0xCE624u, kEngine + 0xDC7Cu};
 
 // Sounds whose flags do not say what they are (sound_levels.hpp).
 //
@@ -85,6 +94,7 @@ void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
     mgs::crouchwalking::install(runtime);
     mgs::detail_distance::install(runtime, 0x08804000u + 0x15324u, 0x08804000u + 0x20D650u, 0x08804000u + 0x1EA680u);
     mgs::presence::install(runtime, 0x08804000u + 0x39A20u);
+    mgs::quick_equip::install(runtime, kQuickEquip);
     mgs::boot_skip::install(runtime, {0x08804000u + 0x3DF48u, 0x08804000u + 0x220CD8u, false, 0x120u, 232u,
                                       0x2F058u, 0x2EF78u, 0x2EDDCu});
 }
@@ -142,8 +152,20 @@ const GameProfile &game() {
                 mgs::crouchwalking::module_ready(runtime, name, base);
                 mgs::boot_skip::module_ready(runtime, name, base, code);
             },
-        .draw_game_settings = +[] { mgs::boot_skip::draw(); mgs::analog_stalk::draw(); mgs::fulton_settings::draw(); },
-        .reset_game_settings = +[] { mgs::boot_skip::reset(); mgs::analog_stalk::reset(); mgs::fulton_settings::reset(); },
+        .draw_game_settings =
+            +[] {
+                mgs::boot_skip::draw();
+                mgs::analog_stalk::draw();
+                mgs::quick_equip::draw();
+                mgs::fulton_settings::draw();
+            },
+        .reset_game_settings =
+            +[] {
+                mgs::boot_skip::reset();
+                mgs::analog_stalk::reset();
+                mgs::quick_equip::reset();
+                mgs::fulton_settings::reset();
+            },
         .draw_audio_settings = &mgs::sound_levels::draw,
         .reset_audio_settings = &mgs::sound_levels::reset,
         .game_settings_screen = &mgs::fulton_settings::screen,
