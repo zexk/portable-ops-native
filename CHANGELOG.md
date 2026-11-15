@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Accept PPSSPP texture packs using the legacy `quick` hash, including
+  packs that omit the hash setting. Match their texture keys at runtime
+  and show the correct hash name in the import screen.
+
 ## 0.1.0-rc2 (2026-11-13, prerelease)
 
 ### New
