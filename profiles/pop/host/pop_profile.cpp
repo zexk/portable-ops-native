@@ -196,7 +196,6 @@ const GameProfile &game() {
         .other_game_saves = kPortableOpsSaves,
 
         .adhoc_product_code = kRelease.disc_id,
-        .adhoc_menu = false,
         .infrastructure_host = &mgs::savempo_host,
         .infrastructure_url = &mgs::savempo_url,
         .settings_defaults = &mgs::settings_defaults,
