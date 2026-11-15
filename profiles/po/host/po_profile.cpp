@@ -89,6 +89,9 @@ constexpr mgs::sound_levels::Config kSoundLevels{kSound2 + 0x2D340u, kSound2 + 0
                                                  kSound2 + 0x287A0u, kSound2 + 0x8CA0u, &classify_sound, true};
 
 void patch_image(psprecomp::Runtime &runtime, const psprecomp::Elf32Image &) {
+    // The message appender and the lobby join request's call to it (savempo.hpp),
+    // byte for byte the same routine as PO+'s.
+    mgs::install_savempo_mark(runtime, {0x08804000u + 0x1BF684u, 0x08804000u + 0x1B86CCu});
     mgs::install_camera(runtime, kCamera);
     mgs::install_camera_follow(runtime, kCameraUpdate);
     mgs::install_model_trace(runtime, 0x08804000u + 0x45EA4u, 0x08804000u + 0x45954u);
